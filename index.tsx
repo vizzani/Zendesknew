@@ -23,7 +23,9 @@ import {
   UserPlus,
   Trash2,
   Settings,
-  Loader2
+  Loader2,
+  List,
+  Grid
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { db } from './db.js';
@@ -275,11 +277,12 @@ const InfoView = () => {
          <Info className="w-10 h-10 text-[#17494D]" />
        </div>
        <h2 className="text-2xl font-bold text-slate-800 mb-2">Portale Risorse Tecniche</h2>
-       <p className="text-slate-500 mb-6">Versione Ottimizzata per Zendesk & Mobile</p>
+       <p className="text-slate-500 mb-6">Versione Ottimizzata per Zendesk & Vercel</p>
        
        <div className="bg-blue-50 text-blue-800 p-4 rounded-lg text-sm mb-6 border border-blue-100">
          <strong>Stato Backend:</strong><br/>
-         Connesso a <code>db.js</code> (Simulazione Locale). I dati vengono salvati nel browser per dimostrazione.
+         Connesso a <code>db.js</code> (Simulazione Locale). <br/>
+         Predisposto per integrazione Serverless (es. Vercel Postgres).
        </div>
 
        <div className="bg-slate-50 rounded-xl p-6 border border-slate-100 text-left grid gap-6">
@@ -574,6 +577,9 @@ const DashboardView = ({ requests, technicians }: { requests: LeaveRequest[], te
 };
 
 const CalendarView = ({ requests, technicians, currentMonth, currentYear, onChangeMonth, onHoverInfo, onDateClick }: any) => {
+  const [viewMode, setViewMode] = useState<'month' | 'day'>('month');
+  const [selectedDay, setSelectedDay] = useState(new Date().getDate());
+
   const daysInMonth = getDaysInMonth(currentYear, currentMonth);
   const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
   
@@ -587,76 +593,208 @@ const CalendarView = ({ requests, technicians, currentMonth, currentYear, onChan
 
   const monthNames = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
 
+  // Daily View Render Logic
+  const renderDailyView = () => {
+    const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}`;
+    
+    return (
+        <div className="animate-fade-in flex-1 overflow-auto">
+            <div className="flex justify-between items-center mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                 <button onClick={() => setSelectedDay(Math.max(1, selectedDay - 1))} className="p-2 hover:bg-white rounded-md text-slate-500"><ChevronLeft className="w-5 h-5"/></button>
+                 <div className="text-center">
+                    <h3 className="text-lg font-bold text-slate-800">{selectedDay} {monthNames[currentMonth]} {currentYear}</h3>
+                    <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Programma Giornaliero</p>
+                 </div>
+                 <button onClick={() => setSelectedDay(Math.min(daysInMonth, selectedDay + 1))} className="p-2 hover:bg-white rounded-md text-slate-500"><ChevronRight className="w-5 h-5"/></button>
+            </div>
+
+            <div className="space-y-3">
+                {technicians.map((tech: Technician) => {
+                    const req = requests.find((r: LeaveRequest) => 
+                        r.techId === tech.id && isDateInRange(dateStr, r.startDate, r.endDate)
+                    );
+                    
+                    const isPresent = !req;
+
+                    return (
+                        <div key={tech.id} className="bg-slate-50 border border-slate-100 rounded-lg p-3 flex items-center justify-between group hover:bg-white hover:shadow-sm transition-all">
+                             <div className="flex items-center space-x-3 w-1/3">
+                                <div className="w-8 h-8 rounded-full bg-slate-800 text-white text-xs flex items-center justify-center font-bold">
+                                    {tech.initials}
+                                </div>
+                                <div>
+                                    <p className="text-sm font-bold text-slate-800">{tech.name}</p>
+                                    <p className="text-[10px] text-slate-500 uppercase">{tech.role}</p>
+                                </div>
+                             </div>
+
+                             {/* Time Bar */}
+                             <div className="flex-1 mx-4 h-8 bg-slate-200 rounded-md overflow-hidden relative flex">
+                                {isPresent ? (
+                                    <div className="w-full h-full bg-slate-200 flex items-center justify-center text-xs text-slate-400 font-medium">Disponibile</div>
+                                ) : (
+                                    <>
+                                        {/* Morning Slot */}
+                                        <div className={`
+                                            flex-1 h-full flex items-center justify-center text-[10px] font-bold text-white transition-all
+                                            ${(req.slot === 'full' || req.slot === 'morning') ? getTypeColor(req.type, 'solid') : 'bg-slate-200 text-slate-400'}
+                                        `}>
+                                            {(req.slot === 'full' || req.slot === 'morning') ? 'Mattina' : ''}
+                                        </div>
+                                        {/* Divider */}
+                                        <div className="w-[1px] h-full bg-white/20 z-10"></div>
+                                        {/* Afternoon Slot */}
+                                        <div className={`
+                                            flex-1 h-full flex items-center justify-center text-[10px] font-bold text-white transition-all
+                                            ${(req.slot === 'full' || req.slot === 'afternoon') ? getTypeColor(req.type, 'solid') : 'bg-slate-200 text-slate-400'}
+                                        `}>
+                                            {(req.slot === 'full' || req.slot === 'afternoon') ? 'Pomeriggio' : ''}
+                                        </div>
+                                        
+                                        {/* Overlay for specific types */}
+                                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                             {req.slot === 'hours' && (
+                                                 <div className={`px-2 py-0.5 rounded text-[10px] font-bold ${getTypeColor(req.type, 'bg')} ${getTypeColor(req.type, 'text')} border ${getTypeColor(req.type, 'border')}`}>
+                                                     {req.hours}h {getTypeLabel(req.type)}
+                                                 </div>
+                                             )}
+                                        </div>
+                                    </>
+                                )}
+                             </div>
+
+                             <div className="w-20 text-right">
+                                 {req ? (
+                                     <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase ${getTypeColor(req.type, 'bg')} ${getTypeColor(req.type, 'text')}`}>
+                                         {getTypeLabel(req.type)}
+                                     </span>
+                                 ) : (
+                                     <span className="text-[10px] font-bold text-slate-400 px-2 py-1">PRESENTE</span>
+                                 )}
+                             </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+  };
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6 h-full flex flex-col">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-lg md:text-xl font-bold text-slate-800 capitalize">{monthNames[currentMonth]} <span className="text-slate-400 font-normal">{currentYear}</span></h2>
-        <div className="flex space-x-2 bg-slate-100 p-1 rounded-lg">
-          <button onClick={() => onChangeMonth(-1)} className="p-2 hover:bg-white hover:shadow-sm rounded-md transition-all text-slate-600"><ChevronLeft className="w-5 h-5" /></button>
-          <button onClick={() => onChangeMonth(1)} className="p-2 hover:bg-white hover:shadow-sm rounded-md transition-all text-slate-600"><ChevronRight className="w-5 h-5" /></button>
+      <div className="flex flex-col md:flex-row justify-between items-center mb-6 space-y-4 md:space-y-0">
+        <h2 className="text-lg md:text-xl font-bold text-slate-800 capitalize flex items-center">
+            {viewMode === 'month' ? (
+                <>
+                    {monthNames[currentMonth]} <span className="text-slate-400 font-normal ml-2">{currentYear}</span>
+                </>
+            ) : (
+                'Vista Giornaliera'
+            )}
+        </h2>
+        
+        <div className="flex items-center space-x-4">
+             {/* View Switcher */}
+            <div className="flex bg-slate-100 p-1 rounded-lg">
+                <button 
+                    onClick={() => setViewMode('month')}
+                    className={`flex items-center px-3 py-1.5 rounded-md text-xs font-bold transition-all ${viewMode === 'month' ? 'bg-white text-[#17494D] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                    <Grid className="w-4 h-4 mr-1.5" />
+                    Mese
+                </button>
+                <button 
+                    onClick={() => setViewMode('day')}
+                    className={`flex items-center px-3 py-1.5 rounded-md text-xs font-bold transition-all ${viewMode === 'day' ? 'bg-white text-[#17494D] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                    <List className="w-4 h-4 mr-1.5" />
+                    Giorno
+                </button>
+            </div>
+
+            {/* Nav Arrows */}
+            {viewMode === 'month' && (
+                <div className="flex space-x-1 bg-slate-100 p-1 rounded-lg">
+                    <button onClick={() => onChangeMonth(-1)} className="p-1.5 hover:bg-white hover:shadow-sm rounded-md transition-all text-slate-600"><ChevronLeft className="w-5 h-5" /></button>
+                    <button onClick={() => onChangeMonth(1)} className="p-1.5 hover:bg-white hover:shadow-sm rounded-md transition-all text-slate-600"><ChevronRight className="w-5 h-5" /></button>
+                </div>
+            )}
         </div>
       </div>
       
-      {/* Calendar Grid */}
-      <div className="grid grid-cols-7 mb-2">
-        {['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'].map(d => (
-          <div key={d} className="text-center text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wider py-2 truncate">
-            {d}
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-7 gap-1 md:gap-2 flex-1 auto-rows-fr">
-        {blanks.map(b => <div key={`blank-${b}`} className="p-1" />)}
-        {days.map(day => {
-          const events = getEventsForDay(day);
-          const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-          const isToday = new Date().getDate() === day && new Date().getMonth() === currentMonth;
-
-          return (
-            <div 
-              key={day} 
-              className={`
-                min-h-[60px] md:min-h-[100px] border border-slate-100 rounded-lg p-1 md:p-2 transition-all cursor-pointer relative
-                ${isToday ? 'bg-blue-50/50 ring-1 ring-blue-200' : 'bg-white hover:border-slate-300 hover:shadow-sm'}
-              `}
-              onClick={() => onDateClick(dateStr)}
-            >
-              <div className="flex justify-between items-start mb-1 md:mb-2">
-                  <span className={`text-xs md:text-sm font-semibold w-5 h-5 md:w-7 md:h-7 flex items-center justify-center rounded-full ${isToday ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-700'}`}>
-                    {day}
-                  </span>
-              </div>
-              
-              <div className="space-y-1 overflow-hidden">
-                {events.map((ev: LeaveRequest) => {
-                  const tech = technicians.find((t:any) => t.id === ev.techId);
-                  const bgClass = getTypeColor(ev.type, 'bg');
-                  const textClass = getTypeColor(ev.type, 'text');
-                  const borderClass = getTypeColor(ev.type, 'border');
-                  
-                  return (
-                    <div 
-                      key={ev.id} 
-                      className={`
-                        text-[9px] md:text-[10px] px-1 md:px-2 py-0.5 rounded-md border truncate font-medium transition-transform hover:scale-105
-                        ${bgClass} ${textClass} ${borderClass}
-                      `}
-                      onMouseEnter={(e) => onHoverInfo(e, ev, tech)}
-                      onMouseLeave={() => onHoverInfo(null)}
-                      onClick={(e) => { e.stopPropagation(); onDateClick(dateStr); }} 
-                    >
-                      <span className="font-bold mr-1 hidden md:inline">{tech?.initials}</span>
-                      <span className="md:hidden w-2 h-2 rounded-full bg-current inline-block mr-1"></span>
-                      <span className="hidden md:inline">{ev.slot === 'morning' ? '(Mat)' : ev.slot === 'afternoon' ? '(Pom)' : ''}</span>
-                    </div>
-                  );
-                })}
-              </div>
+      {/* View Content */}
+      {viewMode === 'day' ? renderDailyView() : (
+        <>
+            {/* Calendar Grid */}
+            <div className="grid grid-cols-7 mb-2">
+                {['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'].map(d => (
+                <div key={d} className="text-center text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wider py-2 truncate">
+                    {d}
+                </div>
+                ))}
             </div>
-          );
-        })}
-      </div>
+
+            <div className="grid grid-cols-7 gap-1 md:gap-2 flex-1 auto-rows-fr overflow-y-auto">
+                {blanks.map(b => <div key={`blank-${b}`} className="p-1" />)}
+                {days.map(day => {
+                const events = getEventsForDay(day);
+                const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const isToday = new Date().getDate() === day && new Date().getMonth() === currentMonth;
+
+                return (
+                    <div 
+                    key={day} 
+                    className={`
+                        min-h-[60px] md:min-h-[100px] border border-slate-100 rounded-lg p-1 md:p-2 transition-all cursor-pointer relative group
+                        ${isToday ? 'bg-blue-50/50 ring-1 ring-blue-200' : 'bg-white hover:border-slate-300 hover:shadow-sm'}
+                        ${selectedDay === day ? 'ring-2 ring-[#17494D]/30' : ''}
+                    `}
+                    onClick={() => {
+                         setSelectedDay(day);
+                         onDateClick(dateStr); 
+                    }}
+                    onDoubleClick={() => {
+                        setSelectedDay(day);
+                        setViewMode('day'); // Double click to zoom into day
+                    }}
+                    >
+                    <div className="flex justify-between items-start mb-1 md:mb-2">
+                        <span className={`text-xs md:text-sm font-semibold w-5 h-5 md:w-7 md:h-7 flex items-center justify-center rounded-full ${isToday ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-700'}`}>
+                            {day}
+                        </span>
+                    </div>
+                    
+                    <div className="space-y-1 overflow-hidden">
+                        {events.map((ev: LeaveRequest) => {
+                        const tech = technicians.find((t:any) => t.id === ev.techId);
+                        const bgClass = getTypeColor(ev.type, 'bg');
+                        const textClass = getTypeColor(ev.type, 'text');
+                        const borderClass = getTypeColor(ev.type, 'border');
+                        
+                        return (
+                            <div 
+                            key={ev.id} 
+                            className={`
+                                text-[9px] md:text-[10px] px-1 md:px-2 py-0.5 rounded-md border truncate font-medium transition-transform hover:scale-105
+                                ${bgClass} ${textClass} ${borderClass}
+                            `}
+                            onMouseEnter={(e) => onHoverInfo(e, ev, tech)}
+                            onMouseLeave={() => onHoverInfo(null)}
+                            onClick={(e) => { e.stopPropagation(); onDateClick(dateStr); }} 
+                            >
+                            <span className="font-bold mr-1 hidden md:inline">{tech?.initials}</span>
+                            <span className="md:hidden w-2 h-2 rounded-full bg-current inline-block mr-1"></span>
+                            <span className="hidden md:inline">{ev.slot === 'morning' ? '(Mat)' : ev.slot === 'afternoon' ? '(Pom)' : ''}</span>
+                            </div>
+                        );
+                        })}
+                    </div>
+                    </div>
+                );
+                })}
+            </div>
+        </>
+      )}
     </div>
   );
 };
