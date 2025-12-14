@@ -25,7 +25,8 @@ import {
   Settings,
   Loader2,
   List,
-  Grid
+  Grid,
+  Menu // Added Menu icon
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { db } from './db.js';
@@ -218,7 +219,7 @@ const Sidebar = ({ current, setView, isCollapsed, toggleCollapse }: any) => {
 
   return (
     <div className={`bg-slate-900 text-slate-300 flex flex-col transition-all duration-300 ${isCollapsed ? 'w-0 md:w-16 overflow-hidden md:overflow-visible' : 'w-64'} h-full relative z-20 shadow-lg`}>
-      <div className="p-4 flex items-center justify-between h-16 border-b border-slate-800">
+      <div className="p-4 flex items-center justify-between h-16 border-b border-slate-800 hidden md:flex">
         {!isCollapsed && <span className="font-bold text-white tracking-tight text-lg">Menu</span>}
         <button 
           onClick={toggleCollapse} 
@@ -1222,7 +1223,17 @@ const App = () => {
       {/* Fake Zendesk Navbar Strip */}
       <div className="bg-[#17494D] h-14 flex-shrink-0 flex items-center px-4 md:px-6 justify-between shadow-md z-30">
         <div className="flex items-center space-x-4">
-           <div className="text-white font-extrabold text-lg md:text-xl tracking-tight">Zendesk</div>
+           <div className="flex items-center">
+             {/* Mobile Menu Button */}
+             <button 
+                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                className="md:hidden p-2 mr-2 text-white hover:bg-white/10 rounded-lg transition-colors"
+             >
+                <Menu className="w-6 h-6" />
+             </button>
+             <div className="text-white font-extrabold text-lg md:text-xl tracking-tight">Zendesk</div>
+           </div>
+           
            <div className="bg-white/10 text-white/90 text-xs px-3 py-1 rounded-full backdrop-blur-sm hidden sm:block border border-white/10">
               Portale Risorse
            </div>
@@ -1233,12 +1244,17 @@ const App = () => {
       {/* Main Content Area with Sidebar */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left Sidebar - Now overlay on mobile if needed, or sidebar */}
-        <Sidebar 
-          current={view} 
-          setView={(v:string) => { setView(v); if(window.innerWidth < 768) setIsSidebarCollapsed(true); }} // Auto close on mobile nav
-          isCollapsed={isSidebarCollapsed} 
-          toggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
-        />
+        <div className={`
+             absolute md:relative z-20 h-full transition-all duration-300
+             ${isSidebarCollapsed ? '-translate-x-full md:translate-x-0' : 'translate-x-0'}
+        `}>
+             <Sidebar 
+                current={view} 
+                setView={(v:string) => { setView(v); if(window.innerWidth < 768) setIsSidebarCollapsed(true); }} // Auto close on mobile nav
+                isCollapsed={isSidebarCollapsed && window.innerWidth >= 768} 
+                toggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
+            />
+        </div>
 
         {/* Content Scroll Area */}
         <div className="flex-1 overflow-auto p-2 md:p-8 w-full relative">
