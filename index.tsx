@@ -22,9 +22,11 @@ import {
   Briefcase,
   UserPlus,
   Trash2,
-  Settings
+  Settings,
+  Loader2
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { db } from './db.js';
 
 // --- Types ---
 
@@ -61,24 +63,6 @@ interface TooltipData {
   hours?: number;
   description?: string;
 }
-
-// --- Constants & Defaults ---
-
-const STORAGE_KEYS = {
-  TECHS: 'zendesk_app_techs_v1',
-  REQUESTS: 'zendesk_app_requests_v1'
-};
-
-const DEFAULT_TECHNICIANS: Technician[] = [
-  { id: '1', name: 'Matteo Vizzani', role: 'IT Manager', initials: 'MV' },
-  { id: '2', name: 'Peter Di Pasquantonio', role: 'System Admin', initials: 'PD' },
-  { id: '3', name: 'Vittorio Spina', role: 'Helpdesk Specialist', initials: 'VS' },
-  { id: '4', name: 'Daniel Baratti', role: 'Support Technician', initials: 'DB' },
-];
-
-const DEFAULT_REQUESTS: LeaveRequest[] = [
-  { id: '101', techId: '1', startDate: '2023-10-05', endDate: '2023-10-06', type: 'ferie', slot: 'full', description: 'Weekend lungo' },
-];
 
 // --- Helper Functions ---
 
@@ -294,8 +278,8 @@ const InfoView = () => {
        <p className="text-slate-500 mb-6">Versione Ottimizzata per Zendesk & Mobile</p>
        
        <div className="bg-blue-50 text-blue-800 p-4 rounded-lg text-sm mb-6 border border-blue-100">
-         <strong>Nota sul salvataggio dati:</strong><br/>
-         I dati vengono salvati localmente in questo browser. Se cancelli la cache o cambi dispositivo, i dati non saranno visibili.
+         <strong>Stato Backend:</strong><br/>
+         Connesso a <code>db.js</code> (Simulazione Locale). I dati vengono salvati nel browser per dimostrazione.
        </div>
 
        <div className="bg-slate-50 rounded-xl p-6 border border-slate-100 text-left grid gap-6">
@@ -312,19 +296,6 @@ const InfoView = () => {
                     </a>
                 </div>
             </div>
-          </div>
-          
-          <div>
-             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Divisione</h3>
-             <div className="flex items-center p-3 bg-white rounded-lg border border-slate-200 shadow-sm">
-                <div className="p-2 bg-emerald-50 text-emerald-600 rounded-md mr-4">
-                     <Users className="w-5 h-5" />
-                </div>
-                <div>
-                     <p className="text-xs text-slate-400 uppercase font-semibold">Team</p>
-                     <p className="text-slate-800 font-medium">ITS Pescara Helpdesk</p>
-                </div>
-             </div>
           </div>
        </div>
     </div>
@@ -985,33 +956,37 @@ const RequestForm = ({ technicians, onSubmit, onCancel, initialValues }: any) =>
 // --- App Container ---
 
 const App = () => {
-  // --- Local Storage Initialization ---
-  const [technicians, setTechnicians] = useState<Technician[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.TECHS);
-    return saved ? JSON.parse(saved) : DEFAULT_TECHNICIANS;
-  });
-
-  const [requests, setRequests] = useState<LeaveRequest[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.REQUESTS);
-    return saved ? JSON.parse(saved) : DEFAULT_REQUESTS;
-  });
+  const [technicians, setTechnicians] = useState<Technician[]>([]);
+  const [requests, setRequests] = useState<LeaveRequest[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [view, setView] = useState('dashboard');
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true); // Default to collapsed for Zendesk/Mobile
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true); 
   
   const [tooltipData, setTooltipData] = useState<TooltipData>({ visible: false, x: 0, y: 0 });
   const [formInitialValues, setFormInitialValues] = useState<Partial<LeaveRequest> | null>(null);
 
-  // --- Persistence Effects ---
+  // --- Fetch Initial Data from Backend ---
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.TECHS, JSON.stringify(technicians));
-  }, [technicians]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.REQUESTS, JSON.stringify(requests));
-  }, [requests]);
+    const initData = async () => {
+        setIsLoading(true);
+        try {
+            const [techs, reqs] = await Promise.all([
+                db.technicians.list(),
+                db.requests.list()
+            ]);
+            setTechnicians(techs);
+            setRequests(reqs);
+        } catch (error) {
+            console.error("Failed to load data from backend", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    initData();
+  }, []);
 
   const handleMonthChange = (delta: number) => {
     let nextMonth = currentMonth + delta;
@@ -1027,19 +1002,34 @@ const App = () => {
     setCurrentYear(nextYear);
   };
 
-  const handleAddRequest = (req: LeaveRequest) => {
-    setRequests([...requests, req]);
-    setFormInitialValues(null);
-    setView('dashboard');
+  const handleAddRequest = async (req: LeaveRequest) => {
+    try {
+        const savedReq = await db.requests.add(req);
+        setRequests(prev => [...prev, savedReq]);
+        setFormInitialValues(null);
+        setView('dashboard');
+    } catch (e) {
+        alert("Errore salvataggio richiesta");
+    }
   };
 
-  const handleAddTechnician = (tech: Technician) => {
-    setTechnicians([...technicians, tech]);
+  const handleAddTechnician = async (tech: Technician) => {
+    try {
+        const savedTech = await db.technicians.add(tech);
+        setTechnicians(prev => [...prev, savedTech]);
+    } catch (e) {
+        alert("Errore salvataggio tecnico");
+    }
   };
 
-  const handleRemoveTechnician = (id: string) => {
+  const handleRemoveTechnician = async (id: string) => {
     if (confirm('Sei sicuro di voler rimuovere questo tecnico?')) {
-        setTechnicians(technicians.filter(t => t.id !== id));
+        try {
+            await db.technicians.remove(id);
+            setTechnicians(prev => prev.filter(t => t.id !== id));
+        } catch (e) {
+            alert("Errore rimozione tecnico");
+        }
     }
   };
 
@@ -1047,7 +1037,7 @@ const App = () => {
     setFormInitialValues({
       startDate: dateStr,
       endDate: dateStr,
-      techId: techId || technicians[0].id,
+      techId: techId || (technicians.length > 0 ? technicians[0].id : ''),
     });
     setView('form');
   };
@@ -1068,8 +1058,8 @@ const App = () => {
       visible: true,
       x: e.clientX,
       y: e.clientY,
-      techName: tech.name,
-      techRole: tech.role,
+      techName: tech?.name || 'Sconosciuto',
+      techRole: tech?.role || '',
       type: req.type,
       slot: req.slot,
       dateRange: dateStr,
@@ -1077,6 +1067,15 @@ const App = () => {
       description: req.description
     });
   };
+
+  if (isLoading) {
+      return (
+          <div className="h-screen flex items-center justify-center bg-slate-50 flex-col space-y-4">
+              <Loader2 className="w-10 h-10 text-[#17494D] animate-spin" />
+              <p className="text-slate-500 font-medium">Caricamento Portale...</p>
+          </div>
+      );
+  }
 
   return (
     <div className="h-screen bg-slate-50 flex flex-col overflow-hidden font-sans text-slate-600">
