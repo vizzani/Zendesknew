@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { 
   Calendar, 
@@ -13,7 +13,11 @@ import {
   LayoutGrid,
   AlignLeft,
   Thermometer,
-  Hammer
+  Hammer,
+  Info,
+  Mail,
+  Phone,
+  FileText
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
@@ -40,6 +44,19 @@ interface LeaveRequest {
   description?: string;
 }
 
+interface TooltipData {
+  visible: boolean;
+  x: number;
+  y: number;
+  techName?: string;
+  techRole?: string;
+  type?: AbsenceType;
+  slot?: TimeSlot;
+  dateRange?: string;
+  hours?: number;
+  description?: string;
+}
+
 // --- Mock Data ---
 
 const TECHNICIANS: Technician[] = [
@@ -51,12 +68,12 @@ const TECHNICIANS: Technician[] = [
 ];
 
 const INITIAL_REQUESTS: LeaveRequest[] = [
-  { id: '101', techId: '1', startDate: '2023-10-05', endDate: '2023-10-06', type: 'ferie', slot: 'full' },
-  { id: '102', techId: '2', startDate: '2023-10-10', endDate: '2023-10-10', type: 'permesso', slot: 'morning' },
+  { id: '101', techId: '1', startDate: '2023-10-05', endDate: '2023-10-06', type: 'ferie', slot: 'full', description: 'Weekend lungo' },
+  { id: '102', techId: '2', startDate: '2023-10-10', endDate: '2023-10-10', type: 'permesso', slot: 'morning', description: 'Visita medica' },
   { id: '103', techId: '3', startDate: '2023-10-15', endDate: '2023-10-20', type: 'ferie', slot: 'full' },
-  { id: '104', techId: '4', startDate: '2023-10-05', endDate: '2023-10-05', type: 'permesso', slot: 'hours', hours: 2 },
+  { id: '104', techId: '4', startDate: '2023-10-05', endDate: '2023-10-05', type: 'permesso', slot: 'hours', hours: 2, description: 'Uscita anticipata' },
   { id: '105', techId: '5', startDate: '2023-10-08', endDate: '2023-10-09', type: 'malattia', slot: 'full' },
-  { id: '106', techId: '2', startDate: '2023-10-12', endDate: '2023-10-14', type: 'cantiere', slot: 'full' },
+  { id: '106', techId: '2', startDate: '2023-10-12', endDate: '2023-10-14', type: 'cantiere', slot: 'full', description: 'Installazione Cliente X' },
 ];
 
 // --- Helper Functions ---
@@ -113,6 +130,53 @@ const getTypeLabel = (type: AbsenceType) => {
 
 // --- Components ---
 
+const GlobalTooltip = ({ data }: { data: TooltipData }) => {
+  if (!data.visible) return null;
+
+  const bgClass = data.type ? getTypeColor(data.type, 'bg') : 'bg-gray-800';
+  const borderClass = data.type ? getTypeColor(data.type, 'border') : 'border-gray-700';
+
+  return (
+    <div 
+      className="fixed z-50 pointer-events-none transition-opacity duration-200"
+      style={{ 
+        left: data.x + 15, 
+        top: data.y + 15,
+        maxWidth: '280px'
+      }}
+    >
+      <div className="bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden text-sm">
+        <div className={`px-3 py-2 border-b font-semibold flex items-center justify-between ${bgClass} ${borderClass} bg-opacity-30`}>
+          <span className="capitalize">{getTypeLabel(data.type || 'ferie')}</span>
+          {data.hours && <span className="text-xs bg-white/50 px-1.5 py-0.5 rounded ml-2">{data.hours}h</span>}
+        </div>
+        <div className="p-3 bg-white space-y-2">
+          <div>
+            <p className="font-bold text-gray-800">{data.techName}</p>
+            <p className="text-xs text-gray-500">{data.techRole}</p>
+          </div>
+          <div className="text-xs text-gray-600 flex items-center">
+            <Calendar className="w-3 h-3 mr-1.5" />
+            {data.dateRange}
+          </div>
+          {data.slot !== 'full' && (
+             <div className="text-xs text-gray-600 flex items-center">
+               <Clock className="w-3 h-3 mr-1.5" />
+               <span className="capitalize">{data.slot === 'morning' ? 'Mattina' : 'Pomeriggio'}</span>
+             </div>
+          )}
+          {data.description && (
+            <div className="pt-2 mt-2 border-t border-gray-100 text-xs text-gray-600 italic flex items-start">
+               <FileText className="w-3 h-3 mr-1.5 mt-0.5 flex-shrink-0" />
+               {data.description}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const KPICard = ({ title, value, icon: Icon, subtext, color }: any) => (
   <div className="zendesk-card p-4 flex items-center space-x-4 border-l-4" style={{ borderLeftColor: color }}>
     <div className={`p-3 rounded-full ${color.replace('border-', 'bg-').replace('500', '100')}`}>
@@ -131,16 +195,18 @@ const ViewToggle = ({ current, setView }: { current: string, setView: (v: string
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'calendar', label: 'Calendario', icon: Calendar },
     { id: 'timeline', label: 'Timeline', icon: AlignLeft },
-    { id: 'form', label: 'Inserisci', icon: PlusCircle },
+    // Removed 'Inserisci' (Form) from here
+    { id: 'info', label: 'Info', icon: Info },
   ];
 
   return (
-    <div className="flex bg-gray-200 p-1 rounded-lg">
+    // Added overflow-x-auto for mobile scrolling
+    <div className="flex bg-gray-200 p-1 rounded-lg overflow-x-auto max-w-full no-scrollbar">
       {views.map((v) => (
         <button
           key={v.id}
           onClick={() => setView(v.id)}
-          className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-all ${
+          className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${
             current === v.id 
               ? 'bg-white text-gray-800 shadow-sm' 
               : 'text-gray-600 hover:text-gray-900 hover:bg-gray-300/50'
@@ -156,30 +222,58 @@ const ViewToggle = ({ current, setView }: { current: string, setView: (v: string
 
 // --- Main Views ---
 
+const InfoView = () => {
+  return (
+    <div className="zendesk-card p-8 max-w-2xl mx-auto mt-6 text-center animate-fade-in">
+       <div className="w-16 h-16 bg-[#17494D]/10 rounded-full flex items-center justify-center mx-auto mb-6">
+         <Info className="w-8 h-8 text-[#17494D]" />
+       </div>
+       <h2 className="text-2xl font-bold text-gray-800 mb-2">Informazioni App</h2>
+       <p className="text-gray-500 mb-8">Dashboard per la gestione integrata delle risorse tecniche, ferie e permessi.</p>
+       
+       <div className="bg-gray-50 rounded-lg p-6 border border-gray-100 text-left">
+          <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Contatti Sviluppo</h3>
+          
+          <div className="flex items-center space-x-4 mb-4">
+            <div className="p-2 bg-white border rounded-full">
+              <Mail className="w-5 h-5 text-gray-600" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">Email</p>
+              <a href="mailto:matteo.vizzani@rematarlazzi.it" className="text-blue-600 font-medium hover:underline">
+                matteo.vizzani@rematarlazzi.it
+              </a>
+            </div>
+          </div>
+          
+          <div className="flex items-center space-x-4">
+             <div className="p-2 bg-white border rounded-full">
+               <Users className="w-5 h-5 text-gray-600" />
+             </div>
+             <div>
+               <p className="text-xs text-gray-400">Team</p>
+               <p className="text-gray-700 font-medium">ITS Pescara Helpdesk</p>
+             </div>
+          </div>
+       </div>
+
+       <div className="mt-8 text-xs text-gray-400">
+         Versione 1.0.3 • Integrazione Zendesk
+       </div>
+    </div>
+  );
+};
+
 const DashboardView = ({ requests, technicians }: { requests: LeaveRequest[], technicians: Technician[] }) => {
-  const today = formatDate(new Date()); // Using mock today for simplicity or real today
+  const today = formatDate(new Date()); 
   
-  // Stats
-  // We count Cantiere as "Impegnato" but technically they are working. 
-  // For "In Ferie/Assenti Oggi" we might exclude Cantiere, but keep Malattia.
-  // Let's count "Non Disponibili in Sede" (so include all).
   const absentToday = requests.filter(r => isDateInRange(today, r.startDate, r.endDate)).length;
   const activeTechs = technicians.length - absentToday;
   
-  // Chart Data Preparation
   const chartData = useMemo(() => {
-    const types = { ferie: 0, permesso: 0, malattia: 0, cantiere: 0 };
-    requests.forEach(r => {
-      if (r.type === 'ferie') types.ferie += 1;
-      if (r.type === 'permesso') types.permesso += r.hours || 4;
-      if (r.type === 'malattia') types.malattia += 1;
-      if (r.type === 'cantiere') types.cantiere += 1;
-    });
+    const cantiereCount = requests.filter(r => r.type === 'cantiere').length;
     return [
-      { name: 'Ferie (gg)', value: types.ferie, fill: getTypeColor('ferie', 'fill') },
-      { name: 'Permessi (h)', value: types.permesso, fill: getTypeColor('permesso', 'fill') },
-      { name: 'Malattia (gg)', value: types.malattia, fill: getTypeColor('malattia', 'fill') },
-      { name: 'Cantiere (gg)', value: types.cantiere, fill: getTypeColor('cantiere', 'fill') },
+      { name: 'Cantiere (Interventi)', value: cantiereCount, fill: getTypeColor('cantiere', 'fill') },
     ];
   }, [requests]);
 
@@ -218,13 +312,13 @@ const DashboardView = ({ requests, technicians }: { requests: LeaveRequest[], te
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Chart */}
         <div className="zendesk-card p-6">
-          <h3 className="text-lg font-semibold mb-4 text-gray-800">Distribuzione Attività</h3>
+          <h3 className="text-lg font-semibold mb-4 text-gray-800">Conteggio Cantieri</h3>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} layout="vertical">
                  <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
                 <XAxis type="number" />
-                <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 12}} />
+                <YAxis dataKey="name" type="category" width={120} tick={{fontSize: 12}} />
                 <Tooltip />
                 <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                   {chartData.map((entry, index) => (
@@ -275,7 +369,7 @@ const DashboardView = ({ requests, technicians }: { requests: LeaveRequest[], te
   );
 };
 
-const CalendarView = ({ requests, technicians, currentMonth, currentYear, onChangeMonth }: any) => {
+const CalendarView = ({ requests, technicians, currentMonth, currentYear, onChangeMonth, onHoverInfo, onDateClick }: any) => {
   const daysInMonth = getDaysInMonth(currentYear, currentMonth);
   const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
   
@@ -292,7 +386,7 @@ const CalendarView = ({ requests, technicians, currentMonth, currentYear, onChan
   return (
     <div className="zendesk-card p-4 h-full flex flex-col">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold text-gray-800">{monthNames[currentMonth]} {currentYear}</h2>
+        <h2 className="text-lg md:text-xl font-bold text-gray-800">{monthNames[currentMonth]} {currentYear}</h2>
         <div className="flex space-x-2">
           <button onClick={() => onChangeMonth(-1)} className="p-2 hover:bg-gray-100 rounded"><ChevronLeft className="w-5 h-5" /></button>
           <button onClick={() => onChangeMonth(1)} className="p-2 hover:bg-gray-100 rounded"><ChevronRight className="w-5 h-5" /></button>
@@ -301,16 +395,22 @@ const CalendarView = ({ requests, technicians, currentMonth, currentYear, onChan
       
       <div className="grid grid-cols-7 gap-px bg-gray-200 border border-gray-200 rounded-lg overflow-hidden flex-1">
         {['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'].map(d => (
-          <div key={d} className="bg-gray-50 p-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">
+          <div key={d} className="bg-gray-50 p-1 md:p-2 text-center text-[10px] md:text-xs font-semibold text-gray-500 uppercase tracking-wide truncate">
             {d}
           </div>
         ))}
-        {blanks.map(b => <div key={`blank-${b}`} className="bg-white min-h-[100px]" />)}
+        {blanks.map(b => <div key={`blank-${b}`} className="bg-white min-h-[60px] md:min-h-[100px]" />)}
         {days.map(day => {
           const events = getEventsForDay(day);
+          const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          
           return (
-            <div key={day} className="bg-white p-1 min-h-[100px] border-t border-gray-50 relative group hover:bg-blue-50/30 transition-colors">
-              <span className={`text-sm font-medium p-1 rounded-full ${new Date().getDate() === day && new Date().getMonth() === currentMonth ? 'bg-blue-600 text-white' : 'text-gray-700'}`}>
+            <div 
+              key={day} 
+              className="bg-white p-1 min-h-[60px] md:min-h-[100px] border-t border-gray-50 relative group hover:bg-blue-50/10 transition-colors cursor-pointer"
+              onClick={() => onDateClick(dateStr)}
+            >
+              <span className={`text-xs md:text-sm font-medium p-1 rounded-full ${new Date().getDate() === day && new Date().getMonth() === currentMonth ? 'bg-blue-600 text-white' : 'text-gray-700'}`}>
                 {day}
               </span>
               <div className="mt-1 space-y-1">
@@ -320,7 +420,13 @@ const CalendarView = ({ requests, technicians, currentMonth, currentYear, onChan
                   const textClass = getTypeColor(ev.type, 'text');
                   
                   return (
-                    <div key={ev.id} className={`text-[10px] px-1 py-0.5 rounded truncate ${bgClass} ${textClass}`}>
+                    <div 
+                      key={ev.id} 
+                      className={`text-[9px] md:text-[10px] px-1 py-0.5 rounded truncate ${bgClass} ${textClass} cursor-pointer hover:brightness-95`}
+                      onMouseEnter={(e) => onHoverInfo(e, ev, tech)}
+                      onMouseLeave={() => onHoverInfo(null)}
+                      onClick={(e) => { e.stopPropagation(); onDateClick(dateStr); }} // Clicking an event also opens form for that day
+                    >
                       {tech?.name.split(' ')[0]} {ev.slot === 'morning' ? '(M)' : ev.slot === 'afternoon' ? '(P)' : ''}
                     </div>
                   );
@@ -334,7 +440,7 @@ const CalendarView = ({ requests, technicians, currentMonth, currentYear, onChan
   );
 };
 
-const TimelineView = ({ requests, technicians, currentMonth, currentYear }: any) => {
+const TimelineView = ({ requests, technicians, currentMonth, currentYear, onHoverInfo, onDateClick }: any) => {
   const daysInMonth = getDaysInMonth(currentYear, currentMonth);
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
@@ -345,9 +451,9 @@ const TimelineView = ({ requests, technicians, currentMonth, currentYear }: any)
         <div className="min-w-max">
           {/* Header Row */}
           <div className="flex border-b sticky top-0 bg-gray-50 z-10">
-            <div className="w-48 p-3 font-semibold text-gray-600 border-r bg-gray-50 sticky left-0 z-20 shadow-sm">Tecnico</div>
+            <div className="w-32 md:w-48 p-3 font-semibold text-gray-600 border-r bg-gray-50 sticky left-0 z-20 shadow-sm">Tecnico</div>
             {days.map(d => (
-              <div key={d} className="w-10 flex-shrink-0 text-center text-xs text-gray-500 py-3 border-r">
+              <div key={d} className="w-8 md:w-10 flex-shrink-0 text-center text-xs text-gray-500 py-3 border-r">
                 {d}
               </div>
             ))}
@@ -356,11 +462,11 @@ const TimelineView = ({ requests, technicians, currentMonth, currentYear }: any)
           {/* Rows */}
           {technicians.map((tech: Technician) => (
             <div key={tech.id} className="flex border-b hover:bg-gray-50">
-              <div className="w-48 p-3 border-r flex items-center space-x-2 sticky left-0 bg-white z-10">
+              <div className="w-32 md:w-48 p-3 border-r flex items-center space-x-2 sticky left-0 bg-white z-10">
                 <div className={`w-6 h-6 rounded-full ${tech.avatarColor} text-white text-xs flex items-center justify-center`}>
                   {tech.name.charAt(0)}
                 </div>
-                <span className="text-sm font-medium text-gray-700 truncate">{tech.name}</span>
+                <span className="text-xs md:text-sm font-medium text-gray-700 truncate">{tech.name}</span>
               </div>
               {days.map(d => {
                 const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -385,8 +491,9 @@ const TimelineView = ({ requests, technicians, currentMonth, currentYear }: any)
 
                    cellContent = (
                      <div 
-                      className={`h-6 mx-0.5 mt-2 ${roundedClass} text-[9px] flex items-center justify-center text-white cursor-help ${bgClass}`}
-                      title={`${getTypeLabel(leave.type)} - ${leave.slot}`}
+                      className={`h-6 mx-0.5 mt-2 ${roundedClass} text-[9px] flex items-center justify-center text-white cursor-help ${bgClass} hover:brightness-110 transition-all`}
+                      onMouseEnter={(e) => onHoverInfo(e, leave, tech)}
+                      onMouseLeave={() => onHoverInfo(null)}
                      >
                        {isStart && letter}
                      </div>
@@ -394,7 +501,11 @@ const TimelineView = ({ requests, technicians, currentMonth, currentYear }: any)
                 }
 
                 return (
-                  <div key={d} className="w-10 flex-shrink-0 border-r relative bg-white">
+                  <div 
+                    key={d} 
+                    className="w-8 md:w-10 flex-shrink-0 border-r relative bg-white cursor-pointer hover:bg-blue-50/20"
+                    onClick={() => onDateClick(dateStr, tech.id)}
+                  >
                     {cellContent}
                   </div>
                 );
@@ -407,14 +518,16 @@ const TimelineView = ({ requests, technicians, currentMonth, currentYear }: any)
   );
 };
 
-const RequestForm = ({ technicians, onSubmit, onCancel }: any) => {
+const RequestForm = ({ technicians, onSubmit, onCancel, initialValues }: any) => {
   const [formData, setFormData] = useState<Partial<LeaveRequest>>({
     techId: technicians[0].id,
     type: 'ferie',
     slot: 'full',
     startDate: formatDate(new Date()),
     endDate: formatDate(new Date()),
-    hours: 1
+    hours: 1,
+    description: '',
+    ...initialValues // Override with initial values if provided
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -443,10 +556,10 @@ const RequestForm = ({ technicians, onSubmit, onCancel }: any) => {
   );
 
   return (
-    <div className="zendesk-card max-w-2xl mx-auto p-8 mt-6">
+    <div className="zendesk-card max-w-2xl mx-auto p-4 md:p-8 mt-6">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Nuova Richiesta / Attività</h2>
-        <button onClick={onCancel} className="text-gray-500 hover:text-gray-700">Chiudi</button>
+        <h2 className="text-xl md:text-2xl font-bold text-gray-800">Nuova Richiesta / Attività</h2>
+        <button onClick={onCancel} className="text-gray-500 hover:text-gray-700 text-sm md:text-base">Chiudi</button>
       </div>
       
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -467,7 +580,7 @@ const RequestForm = ({ technicians, onSubmit, onCancel }: any) => {
         </div>
 
         {/* Tipo Grid */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <SelectionCard 
             type="ferie" 
             icon={Sun} 
@@ -503,7 +616,7 @@ const RequestForm = ({ technicians, onSubmit, onCancel }: any) => {
         </div>
 
         {/* Date Selection */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
            <div>
              <label className="block text-sm font-medium text-gray-700 mb-1">Dal</label>
              <input 
@@ -527,8 +640,8 @@ const RequestForm = ({ technicians, onSubmit, onCancel }: any) => {
 
         {/* Slot Specifics */}
         <div className="bg-gray-50 p-4 rounded-md">
-           <label className="block text-sm font-medium text-gray-700 mb-2">Dettaglio Orario</label>
-           <div className="flex space-x-4 flex-wrap gap-y-2">
+           <label className="block text-sm font-medium text-gray-700 mb-2">Dettaglio</label>
+           <div className="flex flex-col sm:flex-row sm:space-x-4 gap-y-2 mb-4">
              {['full', 'morning', 'afternoon'].map(opt => (
                <label key={opt} className="flex items-center mr-4">
                  <input 
@@ -558,8 +671,8 @@ const RequestForm = ({ technicians, onSubmit, onCancel }: any) => {
            </div>
 
            {formData.slot === 'hours' && (
-             <div className="mt-3 animate-fade-in">
-               <label className="block text-xs font-medium text-gray-500">Numero Ore</label>
+             <div className="mb-4 animate-fade-in">
+               <label className="block text-xs font-medium text-gray-500 mb-1">Numero Ore</label>
                <input 
                  type="number" 
                  min="1" 
@@ -570,6 +683,17 @@ const RequestForm = ({ technicians, onSubmit, onCancel }: any) => {
                />
              </div>
            )}
+
+           <div>
+             <label className="block text-xs font-medium text-gray-500 mb-1">Note / Descrizione (Opzionale)</label>
+             <input 
+               type="text" 
+               value={formData.description || ''}
+               onChange={e => setFormData({...formData, description: e.target.value})}
+               className="w-full border rounded p-2 text-sm"
+               placeholder="Es. Visita medica, Cantiere Via Roma..."
+             />
+           </div>
         </div>
 
         <button type="submit" className="w-full bg-[#17494D] text-white py-3 rounded hover:bg-[#133a3e] transition-colors font-medium">
@@ -587,6 +711,9 @@ const App = () => {
   const [requests, setRequests] = useState<LeaveRequest[]>(INITIAL_REQUESTS);
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+  
+  const [tooltipData, setTooltipData] = useState<TooltipData>({ visible: false, x: 0, y: 0 });
+  const [formInitialValues, setFormInitialValues] = useState<Partial<LeaveRequest> | null>(null);
 
   const handleMonthChange = (delta: number) => {
     let nextMonth = currentMonth + delta;
@@ -604,25 +731,65 @@ const App = () => {
 
   const handleAddRequest = (req: LeaveRequest) => {
     setRequests([...requests, req]);
+    setFormInitialValues(null);
     setView('dashboard');
+  };
+
+  const handleDateClick = (dateStr: string, techId?: string) => {
+    setFormInitialValues({
+      startDate: dateStr,
+      endDate: dateStr,
+      techId: techId || TECHNICIANS[0].id,
+    });
+    setView('form');
+  };
+
+  const handleHoverInfo = (e: React.MouseEvent, req: LeaveRequest, tech: Technician) => {
+    if (!req) {
+      setTooltipData({ ...tooltipData, visible: false });
+      return;
+    }
+
+    const rect = (e.target as HTMLElement).getBoundingClientRect();
+    
+    // Format date string for tooltip
+    let dateStr = req.startDate;
+    if (req.endDate && req.endDate !== req.startDate) {
+      dateStr += ` → ${req.endDate}`;
+    }
+
+    setTooltipData({
+      visible: true,
+      x: e.clientX,
+      y: e.clientY,
+      techName: tech.name,
+      techRole: tech.role,
+      type: req.type,
+      slot: req.slot,
+      dateRange: dateStr,
+      hours: req.hours,
+      description: req.description
+    });
   };
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
+      <GlobalTooltip data={tooltipData} />
+      
       {/* Fake Zendesk Navbar Strip */}
       <div className="bg-[#17494D] h-12 flex items-center px-4 justify-between shadow-sm">
         <div className="flex items-center space-x-3">
            <div className="text-white font-bold text-lg tracking-tight">Zendesk</div>
-           <div className="bg-white/20 text-white text-xs px-2 py-0.5 rounded">Team Resources App</div>
+           <div className="bg-white/20 text-white text-xs px-2 py-0.5 rounded hidden sm:block">Team Resources App</div>
         </div>
-        <div className="text-white/80 text-sm">Tech Team Italy</div>
+        <div className="text-white/80 text-sm">ITS Pescara Helpdesk</div>
       </div>
 
-      <div className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-6">
+      <div className="flex-1 max-w-7xl mx-auto w-full p-2 md:p-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Gestione Ferie & Permessi</h1>
-            <p className="text-gray-500">Pianificazione risorse tecniche e disponibilità</p>
+          <div className="mb-2 md:mb-0">
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900">Gestione Ferie & Permessi</h1>
+            <p className="text-sm md:text-base text-gray-500">Pianificazione risorse tecniche</p>
           </div>
           
           <ViewToggle current={view} setView={setView} />
@@ -637,6 +804,8 @@ const App = () => {
               currentMonth={currentMonth} 
               currentYear={currentYear}
               onChangeMonth={handleMonthChange}
+              onHoverInfo={handleHoverInfo}
+              onDateClick={handleDateClick}
             />
           )}
           {view === 'timeline' && (
@@ -645,15 +814,19 @@ const App = () => {
               technicians={TECHNICIANS}
               currentMonth={currentMonth} 
               currentYear={currentYear}
+              onHoverInfo={handleHoverInfo}
+              onDateClick={handleDateClick}
             />
           )}
           {view === 'form' && (
             <RequestForm 
               technicians={TECHNICIANS} 
               onSubmit={handleAddRequest} 
-              onCancel={() => setView('dashboard')} 
+              onCancel={() => { setView('dashboard'); setFormInitialValues(null); }} 
+              initialValues={formInitialValues}
             />
           )}
+           {view === 'info' && <InfoView />}
         </div>
       </div>
     </div>
