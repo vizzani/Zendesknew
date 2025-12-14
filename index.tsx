@@ -17,7 +17,9 @@ import {
   Info,
   Mail,
   Phone,
-  FileText
+  FileText,
+  PanelLeftClose,
+  PanelLeft
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
@@ -190,32 +192,62 @@ const KPICard = ({ title, value, icon: Icon, subtext, color }: any) => (
   </div>
 );
 
-const ViewToggle = ({ current, setView }: { current: string, setView: (v: string) => void }) => {
+const Sidebar = ({ current, setView, isCollapsed, toggleCollapse }: any) => {
   const views = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'calendar', label: 'Calendario', icon: Calendar },
     { id: 'timeline', label: 'Timeline', icon: AlignLeft },
-    // Removed 'Inserisci' (Form) from here
     { id: 'info', label: 'Info', icon: Info },
   ];
 
   return (
-    // Added overflow-x-auto for mobile scrolling
-    <div className="flex bg-gray-200 p-1 rounded-lg overflow-x-auto max-w-full no-scrollbar">
-      {views.map((v) => (
-        <button
-          key={v.id}
-          onClick={() => setView(v.id)}
-          className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${
-            current === v.id 
-              ? 'bg-white text-gray-800 shadow-sm' 
-              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-300/50'
-          }`}
+    <div className={`bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-64'} h-full shadow-sm relative z-20`}>
+      <div className="p-4 flex items-center justify-between h-14 border-b border-gray-100">
+        {!isCollapsed && <span className="font-bold text-gray-700 truncate">Menu</span>}
+        <button 
+          onClick={toggleCollapse} 
+          className="p-1.5 hover:bg-gray-100 rounded-md text-gray-500 transition-colors mx-auto md:mx-0"
         >
-          <v.icon className="w-4 h-4 mr-2" />
-          {v.label}
+          {isCollapsed ? <PanelLeft className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
         </button>
-      ))}
+      </div>
+
+      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+        {views.map((v) => (
+          <button
+            key={v.id}
+            onClick={() => setView(v.id)}
+            className={`w-full flex items-center p-2 rounded-md transition-all group relative ${
+              current === v.id 
+                ? 'bg-blue-50 text-blue-700' 
+                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+            }`}
+          >
+            <div className={`flex items-center justify-center ${isCollapsed ? 'w-full' : 'w-8'}`}>
+               <v.icon className={`w-5 h-5 ${current === v.id ? 'text-blue-600' : 'text-gray-500 group-hover:text-gray-700'}`} />
+            </div>
+            
+            {!isCollapsed && (
+              <span className="ml-3 text-sm font-medium truncate">{v.label}</span>
+            )}
+            
+            {/* Tooltip for collapsed state */}
+            {isCollapsed && (
+              <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50">
+                {v.label}
+              </div>
+            )}
+          </button>
+        ))}
+      </nav>
+
+      {!isCollapsed && (
+        <div className="p-4 border-t border-gray-100">
+          <div className="text-xs text-gray-400 text-center">
+            ITS Pescara Helpdesk
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -267,8 +299,10 @@ const InfoView = () => {
 const DashboardView = ({ requests, technicians }: { requests: LeaveRequest[], technicians: Technician[] }) => {
   const today = formatDate(new Date()); 
   
-  const absentToday = requests.filter(r => isDateInRange(today, r.startDate, r.endDate)).length;
-  const activeTechs = technicians.length - absentToday;
+  // Find requests active today
+  const activeAbsences = requests.filter(r => isDateInRange(today, r.startDate, r.endDate));
+  const absentTodayCount = activeAbsences.length;
+  const activeTechsCount = technicians.length - absentTodayCount;
   
   const chartData = useMemo(() => {
     const cantiereCount = requests.filter(r => r.type === 'cantiere').length;
@@ -278,24 +312,29 @@ const DashboardView = ({ requests, technicians }: { requests: LeaveRequest[], te
   }, [requests]);
 
   const upcomingLeaves = requests
-    .filter(r => r.startDate >= today)
+    .filter(r => r.startDate > today) // Only future
     .sort((a, b) => a.startDate.localeCompare(b.startDate))
     .slice(0, 5);
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in p-2">
+      <div className="mb-4">
+         <h1 className="text-2xl font-bold text-gray-900">Dashboard Operativa</h1>
+         <p className="text-gray-500">Panoramica risorse per il {new Date().toLocaleDateString('it-IT')}</p>
+      </div>
+
       {/* KPI Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <KPICard 
-          title="Impegnati Oggi" 
-          value={absentToday} 
+          title="Non Operativi Oggi" 
+          value={absentTodayCount} 
           icon={Sun} 
           color="border-red-500" 
           subtext={`Su ${technicians.length} tecnici totali`}
         />
         <KPICard 
           title="Disponibili" 
-          value={activeTechs} 
+          value={activeTechsCount} 
           icon={Users} 
           color="border-green-500" 
           subtext="Disponibilità immediata"
@@ -309,10 +348,64 @@ const DashboardView = ({ requests, technicians }: { requests: LeaveRequest[], te
         />
       </div>
 
+      {/* NOT OPERATIONAL TODAY SECTION */}
+      <div className="zendesk-card p-6 border-l-4 border-l-orange-400">
+          <div className="flex items-center justify-between mb-4">
+             <h3 className="text-lg font-bold text-gray-800 flex items-center">
+               <Thermometer className="w-5 h-5 mr-2 text-orange-500" />
+               Tecnici Non Operativi Oggi
+             </h3>
+             <span className="text-xs font-semibold bg-orange-100 text-orange-700 px-2 py-1 rounded-full">
+               {activeAbsences.length} Assenti/Impegnati
+             </span>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {activeAbsences.length === 0 ? (
+              <div className="col-span-full py-8 text-center text-gray-500 bg-gray-50 rounded border border-dashed border-gray-200">
+                <Users className="w-8 h-8 mx-auto mb-2 text-green-400" />
+                <p>Nessun tecnico assente oggi. Tutti operativi!</p>
+              </div>
+            ) : (
+              activeAbsences.map(req => {
+                const tech = technicians.find(t => t.id === req.techId);
+                const bgClass = getTypeColor(req.type, 'bg');
+                const textClass = getTypeColor(req.type, 'text');
+                const borderClass = getTypeColor(req.type, 'border');
+
+                return (
+                  <div key={req.id} className="flex items-start p-3 bg-white rounded-lg border border-gray-200 shadow-sm relative overflow-hidden">
+                    <div className={`absolute top-0 left-0 bottom-0 w-1 ${bgClass.replace('bg-', 'bg-')}`}></div>
+                    <div className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-white text-sm font-bold ${tech?.avatarColor} mr-3`}>
+                      {tech?.name.charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-gray-900 truncate">{tech?.name}</p>
+                      <p className="text-xs text-gray-500 mb-1">{tech?.role}</p>
+                      <div className="flex items-center space-x-2">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide border ${bgClass} ${textClass} border-opacity-20`}>
+                          {getTypeLabel(req.type)}
+                        </span>
+                        <span className="text-[10px] text-gray-400 flex items-center">
+                           <Clock className="w-3 h-3 mr-1" />
+                           {req.slot === 'full' ? 'Tutto il dì' : req.slot}
+                        </span>
+                      </div>
+                      {req.description && (
+                         <p className="text-[11px] text-gray-500 mt-1 italic truncate">"{req.description}"</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Chart */}
         <div className="zendesk-card p-6">
-          <h3 className="text-lg font-semibold mb-4 text-gray-800">Conteggio Cantieri</h3>
+          <h3 className="text-lg font-semibold mb-4 text-gray-800">Statistiche Cantieri</h3>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} layout="vertical">
@@ -330,12 +423,12 @@ const DashboardView = ({ requests, technicians }: { requests: LeaveRequest[], te
           </div>
         </div>
 
-        {/* List */}
+        {/* Upcoming List */}
         <div className="zendesk-card p-6">
-          <h3 className="text-lg font-semibold mb-4 text-gray-800">Prossime Attività/Assenze</h3>
+          <h3 className="text-lg font-semibold mb-4 text-gray-800">Prossime Pianificazioni</h3>
           <div className="space-y-3">
             {upcomingLeaves.length === 0 ? (
-              <p className="text-gray-400 text-sm">Nessuna attività programmata.</p>
+              <p className="text-gray-400 text-sm">Nessuna attività futura programmata.</p>
             ) : (
               upcomingLeaves.map(req => {
                 const tech = technicians.find(t => t.id === req.techId);
@@ -343,7 +436,7 @@ const DashboardView = ({ requests, technicians }: { requests: LeaveRequest[], te
                 const textClass = getTypeColor(req.type, 'text');
 
                 return (
-                  <div key={req.id} className="flex items-center justify-between p-3 bg-gray-50 rounded border border-gray-100">
+                  <div key={req.id} className="flex items-center justify-between p-3 bg-gray-50 rounded border border-gray-100 hover:bg-white transition-colors">
                     <div className="flex items-center space-x-3">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs ${tech?.avatarColor}`}>
                         {tech?.name.charAt(0)}
@@ -351,12 +444,12 @@ const DashboardView = ({ requests, technicians }: { requests: LeaveRequest[], te
                       <div>
                         <p className="text-sm font-medium text-gray-800">{tech?.name}</p>
                         <p className="text-xs text-gray-500">
-                          {getTypeLabel(req.type)} • {req.startDate}
+                          {getTypeLabel(req.type)} • dal {req.startDate}
                         </p>
                       </div>
                     </div>
                     <span className={`text-xs font-bold px-2 py-1 rounded ${bgClass} ${textClass}`}>
-                      {req.slot === 'full' ? 'Tutto il gg' : req.slot}
+                      {req.slot === 'full' ? 'GG' : req.slot}
                     </span>
                   </div>
                 );
@@ -711,6 +804,7 @@ const App = () => {
   const [requests, setRequests] = useState<LeaveRequest[]>(INITIAL_REQUESTS);
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
   const [tooltipData, setTooltipData] = useState<TooltipData>({ visible: false, x: 0, y: 0 });
   const [formInitialValues, setFormInitialValues] = useState<Partial<LeaveRequest> | null>(null);
@@ -773,11 +867,11 @@ const App = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
+    <div className="h-screen bg-gray-100 flex flex-col overflow-hidden">
       <GlobalTooltip data={tooltipData} />
       
       {/* Fake Zendesk Navbar Strip */}
-      <div className="bg-[#17494D] h-12 flex items-center px-4 justify-between shadow-sm">
+      <div className="bg-[#17494D] h-12 flex-shrink-0 flex items-center px-4 justify-between shadow-sm z-30">
         <div className="flex items-center space-x-3">
            <div className="text-white font-bold text-lg tracking-tight">Zendesk</div>
            <div className="bg-white/20 text-white text-xs px-2 py-0.5 rounded hidden sm:block">Team Resources App</div>
@@ -785,48 +879,52 @@ const App = () => {
         <div className="text-white/80 text-sm">ITS Pescara Helpdesk</div>
       </div>
 
-      <div className="flex-1 max-w-7xl mx-auto w-full p-2 md:p-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-          <div className="mb-2 md:mb-0">
-            <h1 className="text-xl md:text-2xl font-bold text-gray-900">Gestione Ferie & Permessi</h1>
-            <p className="text-sm md:text-base text-gray-500">Pianificazione risorse tecniche</p>
-          </div>
-          
-          <ViewToggle current={view} setView={setView} />
-        </div>
+      {/* Main Content Area with Sidebar */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left Sidebar */}
+        <Sidebar 
+          current={view} 
+          setView={setView} 
+          isCollapsed={isSidebarCollapsed} 
+          toggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
+        />
 
-        <div className="min-h-[600px]">
-          {view === 'dashboard' && <DashboardView requests={requests} technicians={TECHNICIANS} />}
-          {view === 'calendar' && (
-            <CalendarView 
-              requests={requests} 
-              technicians={TECHNICIANS} 
-              currentMonth={currentMonth} 
-              currentYear={currentYear}
-              onChangeMonth={handleMonthChange}
-              onHoverInfo={handleHoverInfo}
-              onDateClick={handleDateClick}
-            />
-          )}
-          {view === 'timeline' && (
-            <TimelineView 
-              requests={requests} 
-              technicians={TECHNICIANS}
-              currentMonth={currentMonth} 
-              currentYear={currentYear}
-              onHoverInfo={handleHoverInfo}
-              onDateClick={handleDateClick}
-            />
-          )}
-          {view === 'form' && (
-            <RequestForm 
-              technicians={TECHNICIANS} 
-              onSubmit={handleAddRequest} 
-              onCancel={() => { setView('dashboard'); setFormInitialValues(null); }} 
-              initialValues={formInitialValues}
-            />
-          )}
-           {view === 'info' && <InfoView />}
+        {/* Content Scroll Area */}
+        <div className="flex-1 overflow-auto p-4 md:p-6 w-full relative">
+          
+          <div className="max-w-7xl mx-auto min-h-[600px]">
+            {view === 'dashboard' && <DashboardView requests={requests} technicians={TECHNICIANS} />}
+            {view === 'calendar' && (
+              <CalendarView 
+                requests={requests} 
+                technicians={TECHNICIANS} 
+                currentMonth={currentMonth} 
+                currentYear={currentYear}
+                onChangeMonth={handleMonthChange}
+                onHoverInfo={handleHoverInfo}
+                onDateClick={handleDateClick}
+              />
+            )}
+            {view === 'timeline' && (
+              <TimelineView 
+                requests={requests} 
+                technicians={TECHNICIANS}
+                currentMonth={currentMonth} 
+                currentYear={currentYear}
+                onHoverInfo={handleHoverInfo}
+                onDateClick={handleDateClick}
+              />
+            )}
+            {view === 'form' && (
+              <RequestForm 
+                technicians={TECHNICIANS} 
+                onSubmit={handleAddRequest} 
+                onCancel={() => { setView('dashboard'); setFormInitialValues(null); }} 
+                initialValues={formInitialValues}
+              />
+            )}
+             {view === 'info' && <InfoView />}
+          </div>
         </div>
       </div>
     </div>
