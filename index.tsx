@@ -19,7 +19,10 @@ import {
   PanelLeft,
   CheckCircle2,
   AlertCircle,
-  Briefcase
+  Briefcase,
+  UserPlus,
+  Trash2,
+  Settings
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
@@ -59,23 +62,22 @@ interface TooltipData {
   description?: string;
 }
 
-// --- Mock Data ---
+// --- Constants & Defaults ---
 
-const TECHNICIANS: Technician[] = [
-  { id: '1', name: 'Marco Rossi', role: 'Senior Tech', initials: 'MR' },
-  { id: '2', name: 'Giulia Bianchi', role: 'Field Specialist', initials: 'GB' },
-  { id: '3', name: 'Luca Verdi', role: 'Helpdesk', initials: 'LV' },
-  { id: '4', name: 'Elena Neri', role: 'Support Lead', initials: 'EN' },
-  { id: '5', name: 'Roberto Gallo', role: 'Junior Tech', initials: 'RG' },
+const STORAGE_KEYS = {
+  TECHS: 'zendesk_app_techs_v1',
+  REQUESTS: 'zendesk_app_requests_v1'
+};
+
+const DEFAULT_TECHNICIANS: Technician[] = [
+  { id: '1', name: 'Matteo Vizzani', role: 'IT Manager', initials: 'MV' },
+  { id: '2', name: 'Peter Di Pasquantonio', role: 'System Admin', initials: 'PD' },
+  { id: '3', name: 'Vittorio Spina', role: 'Helpdesk Specialist', initials: 'VS' },
+  { id: '4', name: 'Daniel Baratti', role: 'Support Technician', initials: 'DB' },
 ];
 
-const INITIAL_REQUESTS: LeaveRequest[] = [
+const DEFAULT_REQUESTS: LeaveRequest[] = [
   { id: '101', techId: '1', startDate: '2023-10-05', endDate: '2023-10-06', type: 'ferie', slot: 'full', description: 'Weekend lungo' },
-  { id: '102', techId: '2', startDate: '2023-10-10', endDate: '2023-10-10', type: 'permesso', slot: 'morning', description: 'Visita medica' },
-  { id: '103', techId: '3', startDate: '2023-10-15', endDate: '2023-10-20', type: 'ferie', slot: 'full' },
-  { id: '104', techId: '4', startDate: '2023-10-05', endDate: '2023-10-05', type: 'permesso', slot: 'hours', hours: 2, description: 'Uscita anticipata' },
-  { id: '105', techId: '5', startDate: '2023-10-08', endDate: '2023-10-09', type: 'malattia', slot: 'full' },
-  { id: '106', techId: '2', startDate: '2023-10-12', endDate: '2023-10-14', type: 'cantiere', slot: 'full', description: 'Installazione Cliente X' },
 ];
 
 // --- Helper Functions ---
@@ -89,20 +91,24 @@ const isDateInRange = (checkDate: string, start: string, end: string) => {
   return checkDate >= start && checkDate <= end;
 };
 
-// MODERN COLOR PALETTE
-// Ferie -> Rose (Red/Pinkish)
-// Permesso -> Amber (Orange/Yellow)
-// Malattia -> Indigo (Purple/Blue)
-// Cantiere -> Emerald (Green)
+const generateInitials = (name: string) => {
+  return name
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+};
 
-const getTypeColor = (type: AbsenceType, shade: 'bg' | 'text' | 'border' | 'solid' = 'bg') => {
+// MODERN COLOR PALETTE
+const getTypeColor = (type: AbsenceType, shade: 'bg' | 'text' | 'border' | 'solid' | 'fill' = 'bg') => {
   switch (type) {
     case 'ferie':
       if (shade === 'bg') return 'bg-rose-50';
       if (shade === 'text') return 'text-rose-700';
       if (shade === 'border') return 'border-rose-200';
-      if (shade === 'solid') return 'bg-rose-600'; // For timeline/charts
-      return '#e11d48'; // hex for chart fill
+      if (shade === 'solid') return 'bg-rose-600'; 
+      return '#e11d48'; 
     case 'permesso':
       if (shade === 'bg') return 'bg-amber-50';
       if (shade === 'text') return 'text-amber-700';
@@ -155,7 +161,7 @@ const GlobalTooltip = ({ data }: { data: TooltipData }) => {
     <div 
       className="fixed z-50 pointer-events-none transition-opacity duration-200"
       style={{ 
-        left: data.x + 15, 
+        left: Math.min(data.x + 15, window.innerWidth - 300), // Prevent overflow on right
         top: data.y + 15,
         maxWidth: '280px'
       }}
@@ -220,11 +226,12 @@ const Sidebar = ({ current, setView, isCollapsed, toggleCollapse }: any) => {
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'calendar', label: 'Calendario', icon: CalendarIcon },
     { id: 'timeline', label: 'Timeline', icon: AlignLeft },
+    { id: 'team', label: 'Gestione Team', icon: Users },
     { id: 'info', label: 'Informazioni', icon: Info },
   ];
 
   return (
-    <div className={`bg-slate-900 text-slate-300 flex flex-col transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-64'} h-full relative z-20 shadow-lg`}>
+    <div className={`bg-slate-900 text-slate-300 flex flex-col transition-all duration-300 ${isCollapsed ? 'w-0 md:w-16 overflow-hidden md:overflow-visible' : 'w-64'} h-full relative z-20 shadow-lg`}>
       <div className="p-4 flex items-center justify-between h-16 border-b border-slate-800">
         {!isCollapsed && <span className="font-bold text-white tracking-tight text-lg">Menu</span>}
         <button 
@@ -256,7 +263,7 @@ const Sidebar = ({ current, setView, isCollapsed, toggleCollapse }: any) => {
             
             {/* Tooltip for collapsed state */}
             {isCollapsed && (
-              <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-slate-800 text-white text-xs px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 border border-slate-700">
+              <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-slate-800 text-white text-xs px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 border border-slate-700 hidden md:block">
                 {v.label}
               </div>
             )}
@@ -284,8 +291,13 @@ const InfoView = () => {
          <Info className="w-10 h-10 text-[#17494D]" />
        </div>
        <h2 className="text-2xl font-bold text-slate-800 mb-2">Portale Risorse Tecniche</h2>
-       <p className="text-slate-500 mb-10">Strumento centralizzato per la pianificazione e gestione delle assenze.</p>
+       <p className="text-slate-500 mb-6">Versione Ottimizzata per Zendesk & Mobile</p>
        
+       <div className="bg-blue-50 text-blue-800 p-4 rounded-lg text-sm mb-6 border border-blue-100">
+         <strong>Nota sul salvataggio dati:</strong><br/>
+         I dati vengono salvati localmente in questo browser. Se cancelli la cache o cambi dispositivo, i dati non saranno visibili.
+       </div>
+
        <div className="bg-slate-50 rounded-xl p-6 border border-slate-100 text-left grid gap-6">
           <div>
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Contatti Supporto</h3>
@@ -315,13 +327,94 @@ const InfoView = () => {
              </div>
           </div>
        </div>
-
-       <div className="mt-8 text-xs text-slate-400 font-mono">
-         v1.1.0 • Build Stable
-       </div>
     </div>
   );
 };
+
+const TechManagerView = ({ technicians, onAdd, onRemove }: any) => {
+    const [newTech, setNewTech] = useState({ name: '', role: '' });
+  
+    const handleSubmit = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (newTech.name && newTech.role) {
+        onAdd({
+          name: newTech.name,
+          role: newTech.role,
+          id: Math.random().toString(36).substr(2, 9),
+          initials: generateInitials(newTech.name)
+        });
+        setNewTech({ name: '', role: '' });
+      }
+    };
+  
+    return (
+      <div className="space-y-6 animate-fade-in max-w-4xl mx-auto">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+           <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center">
+             <UserPlus className="w-6 h-6 mr-2 text-[#17494D]" />
+             Aggiungi Nuovo Tecnico
+           </h2>
+           <form onSubmit={handleSubmit} className="flex flex-col md:flex-row gap-4 items-end">
+             <div className="flex-1 w-full">
+               <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome e Cognome</label>
+               <input 
+                 type="text"
+                 placeholder="Es. Mario Rossi"
+                 className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#17494D]/20 focus:border-[#17494D]"
+                 value={newTech.name}
+                 onChange={e => setNewTech({...newTech, name: e.target.value})}
+               />
+             </div>
+             <div className="flex-1 w-full">
+               <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Ruolo / Mansione</label>
+               <input 
+                 type="text"
+                 placeholder="Es. Helpdesk"
+                 className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#17494D]/20 focus:border-[#17494D]"
+                 value={newTech.role}
+                 onChange={e => setNewTech({...newTech, role: e.target.value})}
+               />
+             </div>
+             <button 
+                type="submit"
+                disabled={!newTech.name || !newTech.role}
+                className="w-full md:w-auto bg-[#17494D] text-white py-3 px-6 rounded-lg font-bold hover:bg-[#133a3e] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+             >
+               Aggiungi
+             </button>
+           </form>
+        </div>
+  
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+           <div className="px-6 py-4 border-b border-slate-100 bg-slate-50">
+             <h3 className="text-base font-bold text-slate-800">Membri del Team ({technicians.length})</h3>
+           </div>
+           <div className="divide-y divide-slate-100">
+             {technicians.map((tech: Technician) => (
+               <div key={tech.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-10 h-10 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-sm font-bold">
+                      {tech.initials}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">{tech.name}</p>
+                      <p className="text-xs text-slate-500">{tech.role}</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => onRemove(tech.id)}
+                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                    title="Rimuovi Tecnico"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+               </div>
+             ))}
+           </div>
+        </div>
+      </div>
+    );
+  };
 
 const DashboardView = ({ requests, technicians }: { requests: LeaveRequest[], technicians: Technician[] }) => {
   const today = formatDate(new Date()); 
@@ -524,9 +617,9 @@ const CalendarView = ({ requests, technicians, currentMonth, currentYear, onChan
   const monthNames = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 h-full flex flex-col">
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6 h-full flex flex-col">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold text-slate-800 capitalize">{monthNames[currentMonth]} <span className="text-slate-400 font-normal">{currentYear}</span></h2>
+        <h2 className="text-lg md:text-xl font-bold text-slate-800 capitalize">{monthNames[currentMonth]} <span className="text-slate-400 font-normal">{currentYear}</span></h2>
         <div className="flex space-x-2 bg-slate-100 p-1 rounded-lg">
           <button onClick={() => onChangeMonth(-1)} className="p-2 hover:bg-white hover:shadow-sm rounded-md transition-all text-slate-600"><ChevronLeft className="w-5 h-5" /></button>
           <button onClick={() => onChangeMonth(1)} className="p-2 hover:bg-white hover:shadow-sm rounded-md transition-all text-slate-600"><ChevronRight className="w-5 h-5" /></button>
@@ -536,14 +629,14 @@ const CalendarView = ({ requests, technicians, currentMonth, currentYear, onChan
       {/* Calendar Grid */}
       <div className="grid grid-cols-7 mb-2">
         {['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'].map(d => (
-          <div key={d} className="text-center text-xs font-bold text-slate-400 uppercase tracking-wider py-2">
+          <div key={d} className="text-center text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-wider py-2 truncate">
             {d}
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-2 flex-1 auto-rows-fr">
-        {blanks.map(b => <div key={`blank-${b}`} className="p-2" />)}
+      <div className="grid grid-cols-7 gap-1 md:gap-2 flex-1 auto-rows-fr">
+        {blanks.map(b => <div key={`blank-${b}`} className="p-1" />)}
         {days.map(day => {
           const events = getEventsForDay(day);
           const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -553,18 +646,18 @@ const CalendarView = ({ requests, technicians, currentMonth, currentYear, onChan
             <div 
               key={day} 
               className={`
-                min-h-[100px] border border-slate-100 rounded-lg p-2 transition-all cursor-pointer relative
+                min-h-[60px] md:min-h-[100px] border border-slate-100 rounded-lg p-1 md:p-2 transition-all cursor-pointer relative
                 ${isToday ? 'bg-blue-50/50 ring-1 ring-blue-200' : 'bg-white hover:border-slate-300 hover:shadow-sm'}
               `}
               onClick={() => onDateClick(dateStr)}
             >
-              <div className="flex justify-between items-start mb-2">
-                  <span className={`text-sm font-semibold w-7 h-7 flex items-center justify-center rounded-full ${isToday ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-700'}`}>
+              <div className="flex justify-between items-start mb-1 md:mb-2">
+                  <span className={`text-xs md:text-sm font-semibold w-5 h-5 md:w-7 md:h-7 flex items-center justify-center rounded-full ${isToday ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-700'}`}>
                     {day}
                   </span>
               </div>
               
-              <div className="space-y-1.5 overflow-hidden">
+              <div className="space-y-1 overflow-hidden">
                 {events.map((ev: LeaveRequest) => {
                   const tech = technicians.find((t:any) => t.id === ev.techId);
                   const bgClass = getTypeColor(ev.type, 'bg');
@@ -575,15 +668,16 @@ const CalendarView = ({ requests, technicians, currentMonth, currentYear, onChan
                     <div 
                       key={ev.id} 
                       className={`
-                        text-[10px] px-2 py-1 rounded-md border truncate font-medium transition-transform hover:scale-105
+                        text-[9px] md:text-[10px] px-1 md:px-2 py-0.5 rounded-md border truncate font-medium transition-transform hover:scale-105
                         ${bgClass} ${textClass} ${borderClass}
                       `}
                       onMouseEnter={(e) => onHoverInfo(e, ev, tech)}
                       onMouseLeave={() => onHoverInfo(null)}
                       onClick={(e) => { e.stopPropagation(); onDateClick(dateStr); }} 
                     >
-                      <span className="font-bold mr-1">{tech?.initials}</span>
-                      {ev.slot === 'morning' ? '(Mat)' : ev.slot === 'afternoon' ? '(Pom)' : ''}
+                      <span className="font-bold mr-1 hidden md:inline">{tech?.initials}</span>
+                      <span className="md:hidden w-2 h-2 rounded-full bg-current inline-block mr-1"></span>
+                      <span className="hidden md:inline">{ev.slot === 'morning' ? '(Mat)' : ev.slot === 'afternoon' ? '(Pom)' : ''}</span>
                     </div>
                   );
                 })}
@@ -601,17 +695,17 @@ const TimelineView = ({ requests, technicians, currentMonth, currentYear, onHove
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 overflow-hidden flex flex-col h-full">
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6 overflow-hidden flex flex-col h-full">
       <h3 className="text-xl font-bold mb-6 text-slate-800">Timeline Disponibilità</h3>
       <div className="flex-1 overflow-auto timeline-scroll relative border border-slate-200 rounded-lg">
         <div className="min-w-max">
           {/* Header Row */}
           <div className="flex border-b border-slate-200 sticky top-0 bg-slate-50 z-20 shadow-sm">
-            <div className="w-48 p-3 font-bold text-slate-500 text-xs uppercase tracking-wider border-r border-slate-200 sticky left-0 bg-slate-50 z-30">
+            <div className="w-40 md:w-48 p-3 font-bold text-slate-500 text-xs uppercase tracking-wider border-r border-slate-200 sticky left-0 bg-slate-50 z-30">
                 Tecnico
             </div>
             {days.map(d => (
-              <div key={d} className="w-10 flex-shrink-0 text-center text-xs font-semibold text-slate-500 py-3 border-r border-slate-100">
+              <div key={d} className="w-8 md:w-10 flex-shrink-0 text-center text-xs font-semibold text-slate-500 py-3 border-r border-slate-100">
                 {d}
               </div>
             ))}
@@ -620,13 +714,13 @@ const TimelineView = ({ requests, technicians, currentMonth, currentYear, onHove
           {/* Rows */}
           {technicians.map((tech: Technician) => (
             <div key={tech.id} className="flex border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
-              <div className="w-48 p-3 border-r border-slate-200 flex items-center space-x-3 sticky left-0 bg-white z-10 group">
+              <div className="w-40 md:w-48 p-3 border-r border-slate-200 flex items-center space-x-3 sticky left-0 bg-white z-10 group">
                 <div className="w-8 h-8 rounded-full bg-slate-800 text-white text-xs flex items-center justify-center font-bold">
                   {tech.initials}
                 </div>
-                <div>
-                    <span className="text-sm font-semibold text-slate-700 block">{tech.name}</span>
-                    <span className="text-[10px] text-slate-400 uppercase">{tech.role}</span>
+                <div className="min-w-0">
+                    <span className="text-sm font-semibold text-slate-700 block truncate">{tech.name}</span>
+                    <span className="text-[10px] text-slate-400 uppercase truncate block">{tech.role}</span>
                 </div>
               </div>
               {days.map(d => {
@@ -666,7 +760,7 @@ const TimelineView = ({ requests, technicians, currentMonth, currentYear, onHove
                 return (
                   <div 
                     key={d} 
-                    className="w-10 flex-shrink-0 border-r border-slate-100 relative bg-transparent cursor-pointer hover:bg-slate-100/50 flex flex-col justify-center"
+                    className="w-8 md:w-10 flex-shrink-0 border-r border-slate-100 relative bg-transparent cursor-pointer hover:bg-slate-100/50 flex flex-col justify-center"
                     onClick={() => onDateClick(dateStr, tech.id)}
                   >
                     {cellContent}
@@ -708,7 +802,7 @@ const RequestForm = ({ technicians, onSubmit, onCancel, initialValues }: any) =>
     <button 
       type="button"
       className={`
-        p-4 border rounded-xl flex flex-col items-center justify-center transition-all h-28
+        p-4 border rounded-xl flex flex-col items-center justify-center transition-all h-24 md:h-28
         ${formData.type === type 
             ? `${borderClass} bg-white ring-2 ring-offset-1 ring-slate-200 shadow-md` 
             : 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-white hover:border-slate-300'
@@ -716,23 +810,23 @@ const RequestForm = ({ technicians, onSubmit, onCancel, initialValues }: any) =>
       `}
       onClick={() => setFormData({...formData, type: type, slot: type === 'permesso' ? 'hours' : 'full'})}
     >
-      <Icon className={`w-8 h-8 mb-2 ${formData.type === type ? colorClass : 'text-slate-400'}`} />
-      <span className={`font-bold text-sm ${formData.type === type ? 'text-slate-800' : 'text-slate-500'}`}>{label}</span>
-      {sub && <span className="text-[10px] text-slate-400">{sub}</span>}
+      <Icon className={`w-6 h-6 md:w-8 md:h-8 mb-2 ${formData.type === type ? colorClass : 'text-slate-400'}`} />
+      <span className={`font-bold text-xs md:text-sm ${formData.type === type ? 'text-slate-800' : 'text-slate-500'}`}>{label}</span>
+      {sub && <span className="text-[10px] text-slate-400 hidden md:block">{sub}</span>}
     </button>
   );
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 max-w-2xl mx-auto p-8 mt-6">
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 max-w-2xl mx-auto p-4 md:p-8 mt-6">
       <div className="flex justify-between items-center mb-8 pb-4 border-b border-slate-100">
         <div>
-            <h2 className="text-2xl font-bold text-slate-900">Nuova Pianificazione</h2>
+            <h2 className="text-xl md:text-2xl font-bold text-slate-900">Nuova Pianificazione</h2>
             <p className="text-slate-500 text-sm mt-1">Inserisci i dettagli per la nuova attività o assenza.</p>
         </div>
         <button onClick={onCancel} className="text-slate-500 hover:text-slate-800 text-sm font-medium px-4 py-2 hover:bg-slate-100 rounded-lg transition-colors">Annulla</button>
       </div>
       
-      <form onSubmit={handleSubmit} className="space-y-8">
+      <form onSubmit={handleSubmit} className="space-y-6 md:space-y-8">
         {/* Tecnico */}
         <div className="space-y-2">
           <label className="block text-sm font-bold text-slate-700">Seleziona Tecnico</label>
@@ -891,14 +985,33 @@ const RequestForm = ({ technicians, onSubmit, onCancel, initialValues }: any) =>
 // --- App Container ---
 
 const App = () => {
+  // --- Local Storage Initialization ---
+  const [technicians, setTechnicians] = useState<Technician[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.TECHS);
+    return saved ? JSON.parse(saved) : DEFAULT_TECHNICIANS;
+  });
+
+  const [requests, setRequests] = useState<LeaveRequest[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.REQUESTS);
+    return saved ? JSON.parse(saved) : DEFAULT_REQUESTS;
+  });
+
   const [view, setView] = useState('dashboard');
-  const [requests, setRequests] = useState<LeaveRequest[]>(INITIAL_REQUESTS);
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true); // Default to collapsed for Zendesk/Mobile
   
   const [tooltipData, setTooltipData] = useState<TooltipData>({ visible: false, x: 0, y: 0 });
   const [formInitialValues, setFormInitialValues] = useState<Partial<LeaveRequest> | null>(null);
+
+  // --- Persistence Effects ---
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.TECHS, JSON.stringify(technicians));
+  }, [technicians]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.REQUESTS, JSON.stringify(requests));
+  }, [requests]);
 
   const handleMonthChange = (delta: number) => {
     let nextMonth = currentMonth + delta;
@@ -920,11 +1033,21 @@ const App = () => {
     setView('dashboard');
   };
 
+  const handleAddTechnician = (tech: Technician) => {
+    setTechnicians([...technicians, tech]);
+  };
+
+  const handleRemoveTechnician = (id: string) => {
+    if (confirm('Sei sicuro di voler rimuovere questo tecnico?')) {
+        setTechnicians(technicians.filter(t => t.id !== id));
+    }
+  };
+
   const handleDateClick = (dateStr: string, techId?: string) => {
     setFormInitialValues({
       startDate: dateStr,
       endDate: dateStr,
-      techId: techId || TECHNICIANS[0].id,
+      techId: techId || technicians[0].id,
     });
     setView('form');
   };
@@ -959,36 +1082,36 @@ const App = () => {
     <div className="h-screen bg-slate-50 flex flex-col overflow-hidden font-sans text-slate-600">
       <GlobalTooltip data={tooltipData} />
       
-      {/* Fake Zendesk Navbar Strip - now cleaner */}
-      <div className="bg-[#17494D] h-14 flex-shrink-0 flex items-center px-6 justify-between shadow-md z-30">
+      {/* Fake Zendesk Navbar Strip */}
+      <div className="bg-[#17494D] h-14 flex-shrink-0 flex items-center px-4 md:px-6 justify-between shadow-md z-30">
         <div className="flex items-center space-x-4">
-           <div className="text-white font-extrabold text-xl tracking-tight">Zendesk</div>
+           <div className="text-white font-extrabold text-lg md:text-xl tracking-tight">Zendesk</div>
            <div className="bg-white/10 text-white/90 text-xs px-3 py-1 rounded-full backdrop-blur-sm hidden sm:block border border-white/10">
               Portale Risorse
            </div>
         </div>
-        <div className="text-white/80 text-sm font-medium">ITS Pescara Helpdesk</div>
+        <div className="text-white/80 text-xs md:text-sm font-medium">ITS Pescara Helpdesk</div>
       </div>
 
       {/* Main Content Area with Sidebar */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left Sidebar */}
+        {/* Left Sidebar - Now overlay on mobile if needed, or sidebar */}
         <Sidebar 
           current={view} 
-          setView={setView} 
+          setView={(v:string) => { setView(v); if(window.innerWidth < 768) setIsSidebarCollapsed(true); }} // Auto close on mobile nav
           isCollapsed={isSidebarCollapsed} 
           toggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)} 
         />
 
         {/* Content Scroll Area */}
-        <div className="flex-1 overflow-auto p-4 md:p-8 w-full relative">
+        <div className="flex-1 overflow-auto p-2 md:p-8 w-full relative">
           
-          <div className="max-w-7xl mx-auto min-h-[600px]">
-            {view === 'dashboard' && <DashboardView requests={requests} technicians={TECHNICIANS} />}
+          <div className="max-w-7xl mx-auto min-h-[600px] pb-10">
+            {view === 'dashboard' && <DashboardView requests={requests} technicians={technicians} />}
             {view === 'calendar' && (
               <CalendarView 
                 requests={requests} 
-                technicians={TECHNICIANS} 
+                technicians={technicians} 
                 currentMonth={currentMonth} 
                 currentYear={currentYear}
                 onChangeMonth={handleMonthChange}
@@ -999,16 +1122,23 @@ const App = () => {
             {view === 'timeline' && (
               <TimelineView 
                 requests={requests} 
-                technicians={TECHNICIANS}
+                technicians={technicians}
                 currentMonth={currentMonth} 
                 currentYear={currentYear}
                 onHoverInfo={handleHoverInfo}
                 onDateClick={handleDateClick}
               />
             )}
+            {view === 'team' && (
+                <TechManagerView 
+                    technicians={technicians}
+                    onAdd={handleAddTechnician}
+                    onRemove={handleRemoveTechnician}
+                />
+            )}
             {view === 'form' && (
               <RequestForm 
-                technicians={TECHNICIANS} 
+                technicians={technicians} 
                 onSubmit={handleAddRequest} 
                 onCancel={() => { setView('dashboard'); setFormInitialValues(null); }} 
                 initialValues={formInitialValues}
