@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { 
-  Calendar, 
+  Calendar as CalendarIcon, 
   Clock, 
   Users, 
   PlusCircle, 
@@ -9,17 +9,17 @@ import {
   ChevronLeft, 
   ChevronRight,
   Sun,
-  Moon,
   LayoutGrid,
   AlignLeft,
   Thermometer,
   Hammer,
   Info,
   Mail,
-  Phone,
-  FileText,
   PanelLeftClose,
-  PanelLeft
+  PanelLeft,
+  CheckCircle2,
+  AlertCircle,
+  Briefcase
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
@@ -32,7 +32,7 @@ interface Technician {
   id: string;
   name: string;
   role: string;
-  avatarColor: string;
+  initials: string;
 }
 
 interface LeaveRequest {
@@ -62,11 +62,11 @@ interface TooltipData {
 // --- Mock Data ---
 
 const TECHNICIANS: Technician[] = [
-  { id: '1', name: 'Marco Rossi', role: 'Senior Tech', avatarColor: 'bg-blue-500' },
-  { id: '2', name: 'Giulia Bianchi', role: 'Field Specialist', avatarColor: 'bg-green-500' },
-  { id: '3', name: 'Luca Verdi', role: 'Helpdesk', avatarColor: 'bg-purple-500' },
-  { id: '4', name: 'Elena Neri', role: 'Support Lead', avatarColor: 'bg-orange-500' },
-  { id: '5', name: 'Roberto Gallo', role: 'Junior Tech', avatarColor: 'bg-indigo-500' },
+  { id: '1', name: 'Marco Rossi', role: 'Senior Tech', initials: 'MR' },
+  { id: '2', name: 'Giulia Bianchi', role: 'Field Specialist', initials: 'GB' },
+  { id: '3', name: 'Luca Verdi', role: 'Helpdesk', initials: 'LV' },
+  { id: '4', name: 'Elena Neri', role: 'Support Lead', initials: 'EN' },
+  { id: '5', name: 'Roberto Gallo', role: 'Junior Tech', initials: 'RG' },
 ];
 
 const INITIAL_REQUESTS: LeaveRequest[] = [
@@ -89,32 +89,38 @@ const isDateInRange = (checkDate: string, start: string, end: string) => {
   return checkDate >= start && checkDate <= end;
 };
 
-const getTypeColor = (type: AbsenceType, shade: 'bg' | 'text' | 'border' | 'fill' = 'bg') => {
+// MODERN COLOR PALETTE
+// Ferie -> Rose (Red/Pinkish)
+// Permesso -> Amber (Orange/Yellow)
+// Malattia -> Indigo (Purple/Blue)
+// Cantiere -> Emerald (Green)
+
+const getTypeColor = (type: AbsenceType, shade: 'bg' | 'text' | 'border' | 'solid' = 'bg') => {
   switch (type) {
     case 'ferie':
-      if (shade === 'bg') return 'bg-red-100';
-      if (shade === 'text') return 'text-red-700';
-      if (shade === 'border') return 'border-red-500';
-      if (shade === 'fill') return '#ef4444';
-      return 'red';
+      if (shade === 'bg') return 'bg-rose-50';
+      if (shade === 'text') return 'text-rose-700';
+      if (shade === 'border') return 'border-rose-200';
+      if (shade === 'solid') return 'bg-rose-600'; // For timeline/charts
+      return '#e11d48'; // hex for chart fill
     case 'permesso':
-      if (shade === 'bg') return 'bg-yellow-100';
-      if (shade === 'text') return 'text-yellow-700';
-      if (shade === 'border') return 'border-yellow-500';
-      if (shade === 'fill') return '#eab308';
-      return 'yellow';
+      if (shade === 'bg') return 'bg-amber-50';
+      if (shade === 'text') return 'text-amber-700';
+      if (shade === 'border') return 'border-amber-200';
+      if (shade === 'solid') return 'bg-amber-500';
+      return '#f59e0b';
     case 'malattia':
-      if (shade === 'bg') return 'bg-purple-100';
-      if (shade === 'text') return 'text-purple-700';
-      if (shade === 'border') return 'border-purple-500';
-      if (shade === 'fill') return '#a855f7';
-      return 'purple';
+      if (shade === 'bg') return 'bg-indigo-50';
+      if (shade === 'text') return 'text-indigo-700';
+      if (shade === 'border') return 'border-indigo-200';
+      if (shade === 'solid') return 'bg-indigo-600';
+      return '#4f46e5';
     case 'cantiere':
-      if (shade === 'bg') return 'bg-cyan-100';
-      if (shade === 'text') return 'text-cyan-700';
-      if (shade === 'border') return 'border-cyan-500';
-      if (shade === 'fill') return '#06b6d4';
-      return 'cyan';
+      if (shade === 'bg') return 'bg-emerald-50';
+      if (shade === 'text') return 'text-emerald-700';
+      if (shade === 'border') return 'border-emerald-200';
+      if (shade === 'solid') return 'bg-emerald-600';
+      return '#059669';
     default:
       return 'gray';
   }
@@ -130,13 +136,20 @@ const getTypeLabel = (type: AbsenceType) => {
   }
 };
 
+const getSlotLabel = (slot: TimeSlot) => {
+    switch(slot) {
+        case 'full': return 'Giornata Intera';
+        case 'morning': return 'Mattina';
+        case 'afternoon': return 'Pomeriggio';
+        case 'hours': return 'A Ore';
+        default: return slot;
+    }
+}
+
 // --- Components ---
 
 const GlobalTooltip = ({ data }: { data: TooltipData }) => {
   if (!data.visible) return null;
-
-  const bgClass = data.type ? getTypeColor(data.type, 'bg') : 'bg-gray-800';
-  const borderClass = data.type ? getTypeColor(data.type, 'border') : 'border-gray-700';
 
   return (
     <div 
@@ -147,30 +160,33 @@ const GlobalTooltip = ({ data }: { data: TooltipData }) => {
         maxWidth: '280px'
       }}
     >
-      <div className="bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden text-sm">
-        <div className={`px-3 py-2 border-b font-semibold flex items-center justify-between ${bgClass} ${borderClass} bg-opacity-30`}>
-          <span className="capitalize">{getTypeLabel(data.type || 'ferie')}</span>
-          {data.hours && <span className="text-xs bg-white/50 px-1.5 py-0.5 rounded ml-2">{data.hours}h</span>}
+      <div className="bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden text-sm ring-1 ring-black/5">
+        <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+            <span className={`font-bold text-xs uppercase tracking-wider px-2 py-0.5 rounded-full ${data.type ? getTypeColor(data.type, 'bg') : ''} ${data.type ? getTypeColor(data.type, 'text') : ''}`}>
+                {getTypeLabel(data.type || 'ferie')}
+            </span>
+           {data.hours && <span className="text-xs font-mono bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">{data.hours}h</span>}
         </div>
-        <div className="p-3 bg-white space-y-2">
+        <div className="p-4 bg-white space-y-3">
           <div>
-            <p className="font-bold text-gray-800">{data.techName}</p>
-            <p className="text-xs text-gray-500">{data.techRole}</p>
+            <p className="font-bold text-slate-900 text-base">{data.techName}</p>
+            <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">{data.techRole}</p>
           </div>
-          <div className="text-xs text-gray-600 flex items-center">
-            <Calendar className="w-3 h-3 mr-1.5" />
-            {data.dateRange}
-          </div>
-          {data.slot !== 'full' && (
-             <div className="text-xs text-gray-600 flex items-center">
-               <Clock className="w-3 h-3 mr-1.5" />
-               <span className="capitalize">{data.slot === 'morning' ? 'Mattina' : 'Pomeriggio'}</span>
+          <div className="space-y-1">
+             <div className="text-sm text-slate-600 flex items-center">
+                <CalendarIcon className="w-4 h-4 mr-2 text-slate-400" />
+                {data.dateRange}
              </div>
-          )}
+             {data.slot !== 'full' && (
+                <div className="text-sm text-slate-600 flex items-center">
+                  <Clock className="w-4 h-4 mr-2 text-slate-400" />
+                  <span>{getSlotLabel(data.slot || 'full')}</span>
+                </div>
+             )}
+          </div>
           {data.description && (
-            <div className="pt-2 mt-2 border-t border-gray-100 text-xs text-gray-600 italic flex items-start">
-               <FileText className="w-3 h-3 mr-1.5 mt-0.5 flex-shrink-0" />
-               {data.description}
+            <div className="pt-3 mt-1 border-t border-slate-100 text-sm text-slate-600 italic">
+               "{data.description}"
             </div>
           )}
         </div>
@@ -179,52 +195,59 @@ const GlobalTooltip = ({ data }: { data: TooltipData }) => {
   );
 };
 
-const KPICard = ({ title, value, icon: Icon, subtext, color }: any) => (
-  <div className="zendesk-card p-4 flex items-center space-x-4 border-l-4" style={{ borderLeftColor: color }}>
-    <div className={`p-3 rounded-full ${color.replace('border-', 'bg-').replace('500', '100')}`}>
-      <Icon className={`w-6 h-6 ${color.replace('border-', 'text-')}`} />
-    </div>
-    <div>
-      <p className="text-sm text-gray-500 font-medium">{title}</p>
-      <h3 className="text-2xl font-bold text-gray-800">{value}</h3>
-      {subtext && <p className="text-xs text-gray-400">{subtext}</p>}
-    </div>
-  </div>
-);
+const KPICard = ({ title, value, icon: Icon, subtext, type }: any) => {
+    let iconBg = 'bg-slate-100 text-slate-600';
+    if (type === 'danger') iconBg = 'bg-rose-100 text-rose-600';
+    if (type === 'success') iconBg = 'bg-emerald-100 text-emerald-600';
+    if (type === 'info') iconBg = 'bg-blue-100 text-blue-600';
+
+    return (
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex items-center space-x-4 transition-all hover:shadow-md">
+            <div className={`p-3 rounded-lg ${iconBg}`}>
+                <Icon className="w-6 h-6" />
+            </div>
+            <div>
+                <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">{title}</p>
+                <h3 className="text-2xl font-bold text-slate-800 mt-0.5">{value}</h3>
+                {subtext && <p className="text-xs text-slate-400 mt-1">{subtext}</p>}
+            </div>
+        </div>
+    );
+};
 
 const Sidebar = ({ current, setView, isCollapsed, toggleCollapse }: any) => {
   const views = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-    { id: 'calendar', label: 'Calendario', icon: Calendar },
+    { id: 'calendar', label: 'Calendario', icon: CalendarIcon },
     { id: 'timeline', label: 'Timeline', icon: AlignLeft },
-    { id: 'info', label: 'Info', icon: Info },
+    { id: 'info', label: 'Informazioni', icon: Info },
   ];
 
   return (
-    <div className={`bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-64'} h-full shadow-sm relative z-20`}>
-      <div className="p-4 flex items-center justify-between h-14 border-b border-gray-100">
-        {!isCollapsed && <span className="font-bold text-gray-700 truncate">Menu</span>}
+    <div className={`bg-slate-900 text-slate-300 flex flex-col transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-64'} h-full relative z-20 shadow-lg`}>
+      <div className="p-4 flex items-center justify-between h-16 border-b border-slate-800">
+        {!isCollapsed && <span className="font-bold text-white tracking-tight text-lg">Menu</span>}
         <button 
           onClick={toggleCollapse} 
-          className="p-1.5 hover:bg-gray-100 rounded-md text-gray-500 transition-colors mx-auto md:mx-0"
+          className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors mx-auto md:mx-0"
         >
           {isCollapsed ? <PanelLeft className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
         </button>
       </div>
 
-      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+      <nav className="flex-1 px-3 py-6 space-y-2 overflow-y-auto">
         {views.map((v) => (
           <button
             key={v.id}
             onClick={() => setView(v.id)}
-            className={`w-full flex items-center p-2 rounded-md transition-all group relative ${
+            className={`w-full flex items-center px-3 py-3 rounded-lg transition-all group relative ${
               current === v.id 
-                ? 'bg-blue-50 text-blue-700' 
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                ? 'bg-[#17494D] text-white shadow-md' 
+                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
             }`}
           >
-            <div className={`flex items-center justify-center ${isCollapsed ? 'w-full' : 'w-8'}`}>
-               <v.icon className={`w-5 h-5 ${current === v.id ? 'text-blue-600' : 'text-gray-500 group-hover:text-gray-700'}`} />
+            <div className={`flex items-center justify-center ${isCollapsed ? 'w-full' : ''}`}>
+               <v.icon className={`w-5 h-5 ${current === v.id ? 'text-emerald-400' : 'group-hover:text-slate-200'}`} />
             </div>
             
             {!isCollapsed && (
@@ -233,7 +256,7 @@ const Sidebar = ({ current, setView, isCollapsed, toggleCollapse }: any) => {
             
             {/* Tooltip for collapsed state */}
             {isCollapsed && (
-              <div className="absolute left-full top-1/2 -translate-y-1/2 ml-2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50">
+              <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-slate-800 text-white text-xs px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 border border-slate-700">
                 {v.label}
               </div>
             )}
@@ -242,8 +265,8 @@ const Sidebar = ({ current, setView, isCollapsed, toggleCollapse }: any) => {
       </nav>
 
       {!isCollapsed && (
-        <div className="p-4 border-t border-gray-100">
-          <div className="text-xs text-gray-400 text-center">
+        <div className="p-4 bg-slate-950/30">
+          <div className="text-xs text-slate-500 text-center font-medium">
             ITS Pescara Helpdesk
           </div>
         </div>
@@ -256,41 +279,45 @@ const Sidebar = ({ current, setView, isCollapsed, toggleCollapse }: any) => {
 
 const InfoView = () => {
   return (
-    <div className="zendesk-card p-8 max-w-2xl mx-auto mt-6 text-center animate-fade-in">
-       <div className="w-16 h-16 bg-[#17494D]/10 rounded-full flex items-center justify-center mx-auto mb-6">
-         <Info className="w-8 h-8 text-[#17494D]" />
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 max-w-2xl mx-auto mt-6 text-center animate-fade-in">
+       <div className="w-20 h-20 bg-[#17494D]/5 rounded-full flex items-center justify-center mx-auto mb-6 ring-1 ring-[#17494D]/20">
+         <Info className="w-10 h-10 text-[#17494D]" />
        </div>
-       <h2 className="text-2xl font-bold text-gray-800 mb-2">Informazioni App</h2>
-       <p className="text-gray-500 mb-8">Dashboard per la gestione integrata delle risorse tecniche, ferie e permessi.</p>
+       <h2 className="text-2xl font-bold text-slate-800 mb-2">Portale Risorse Tecniche</h2>
+       <p className="text-slate-500 mb-10">Strumento centralizzato per la pianificazione e gestione delle assenze.</p>
        
-       <div className="bg-gray-50 rounded-lg p-6 border border-gray-100 text-left">
-          <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Contatti Sviluppo</h3>
-          
-          <div className="flex items-center space-x-4 mb-4">
-            <div className="p-2 bg-white border rounded-full">
-              <Mail className="w-5 h-5 text-gray-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-400">Email</p>
-              <a href="mailto:matteo.vizzani@rematarlazzi.it" className="text-blue-600 font-medium hover:underline">
-                matteo.vizzani@rematarlazzi.it
-              </a>
+       <div className="bg-slate-50 rounded-xl p-6 border border-slate-100 text-left grid gap-6">
+          <div>
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Contatti Supporto</h3>
+            <div className="flex items-center p-3 bg-white rounded-lg border border-slate-200 shadow-sm">
+                <div className="p-2 bg-blue-50 text-blue-600 rounded-md mr-4">
+                     <Mail className="w-5 h-5" />
+                </div>
+                <div>
+                    <p className="text-xs text-slate-400 uppercase font-semibold">Sviluppatore</p>
+                    <a href="mailto:matteo.vizzani@rematarlazzi.it" className="text-slate-800 font-medium hover:text-[#17494D] transition-colors">
+                        matteo.vizzani@rematarlazzi.it
+                    </a>
+                </div>
             </div>
           </div>
           
-          <div className="flex items-center space-x-4">
-             <div className="p-2 bg-white border rounded-full">
-               <Users className="w-5 h-5 text-gray-600" />
-             </div>
-             <div>
-               <p className="text-xs text-gray-400">Team</p>
-               <p className="text-gray-700 font-medium">ITS Pescara Helpdesk</p>
+          <div>
+             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Divisione</h3>
+             <div className="flex items-center p-3 bg-white rounded-lg border border-slate-200 shadow-sm">
+                <div className="p-2 bg-emerald-50 text-emerald-600 rounded-md mr-4">
+                     <Users className="w-5 h-5" />
+                </div>
+                <div>
+                     <p className="text-xs text-slate-400 uppercase font-semibold">Team</p>
+                     <p className="text-slate-800 font-medium">ITS Pescara Helpdesk</p>
+                </div>
              </div>
           </div>
        </div>
 
-       <div className="mt-8 text-xs text-gray-400">
-         Versione 1.0.3 • Integrazione Zendesk
+       <div className="mt-8 text-xs text-slate-400 font-mono">
+         v1.1.0 • Build Stable
        </div>
     </div>
   );
@@ -307,7 +334,7 @@ const DashboardView = ({ requests, technicians }: { requests: LeaveRequest[], te
   const chartData = useMemo(() => {
     const cantiereCount = requests.filter(r => r.type === 'cantiere').length;
     return [
-      { name: 'Cantiere (Interventi)', value: cantiereCount, fill: getTypeColor('cantiere', 'fill') },
+      { name: 'Interventi Cantiere', value: cantiereCount, fill: getTypeColor('cantiere', 'fill') },
     ];
   }, [requests]);
 
@@ -318,102 +345,117 @@ const DashboardView = ({ requests, technicians }: { requests: LeaveRequest[], te
 
   return (
     <div className="space-y-6 animate-fade-in p-2">
-      <div className="mb-4">
-         <h1 className="text-2xl font-bold text-gray-900">Dashboard Operativa</h1>
-         <p className="text-gray-500">Panoramica risorse per il {new Date().toLocaleDateString('it-IT')}</p>
+      <div className="flex items-center justify-between mb-2">
+         <div>
+            <h1 className="text-2xl font-bold text-slate-900">Dashboard Operativa</h1>
+            <p className="text-slate-500">Panoramica del {new Date().toLocaleDateString('it-IT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+         </div>
       </div>
 
       {/* KPI Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <KPICard 
           title="Non Operativi Oggi" 
           value={absentTodayCount} 
-          icon={Sun} 
-          color="border-red-500" 
+          icon={AlertCircle} 
+          type="danger" 
           subtext={`Su ${technicians.length} tecnici totali`}
         />
         <KPICard 
-          title="Disponibili" 
+          title="Tecnici Disponibili" 
           value={activeTechsCount} 
-          icon={Users} 
-          color="border-green-500" 
-          subtext="Disponibilità immediata"
+          icon={CheckCircle2} 
+          type="success" 
+          subtext="Pronti per assegnazione"
         />
         <KPICard 
-          title="Attività Mese" 
+          title="Attività Pianificate" 
           value={requests.length} 
-          icon={Calendar} 
-          color="border-blue-500" 
-          subtext="Totale inserimenti"
+          icon={Briefcase} 
+          type="info" 
+          subtext="In questo mese"
         />
       </div>
 
       {/* NOT OPERATIONAL TODAY SECTION */}
-      <div className="zendesk-card p-6 border-l-4 border-l-orange-400">
-          <div className="flex items-center justify-between mb-4">
-             <h3 className="text-lg font-bold text-gray-800 flex items-center">
-               <Thermometer className="w-5 h-5 mr-2 text-orange-500" />
-               Tecnici Non Operativi Oggi
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+             <h3 className="text-base font-bold text-slate-800 flex items-center">
+               <Users className="w-5 h-5 mr-2 text-slate-500" />
+               Stato Assenze Odierne
              </h3>
-             <span className="text-xs font-semibold bg-orange-100 text-orange-700 px-2 py-1 rounded-full">
-               {activeAbsences.length} Assenti/Impegnati
+             <span className={`text-xs font-bold px-3 py-1 rounded-full ${activeAbsences.length > 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+               {activeAbsences.length > 0 ? `${activeAbsences.length} Risorse Indisponibili` : 'Tutto il team operativo'}
              </span>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="p-6">
             {activeAbsences.length === 0 ? (
-              <div className="col-span-full py-8 text-center text-gray-500 bg-gray-50 rounded border border-dashed border-gray-200">
-                <Users className="w-8 h-8 mx-auto mb-2 text-green-400" />
-                <p>Nessun tecnico assente oggi. Tutti operativi!</p>
+              <div className="py-8 text-center bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <h4 className="text-slate-800 font-semibold">Tutti Presenti</h4>
+                <p className="text-slate-500 text-sm">Nessuna assenza o cantiere registrato per oggi.</p>
               </div>
             ) : (
-              activeAbsences.map(req => {
-                const tech = technicians.find(t => t.id === req.techId);
-                const bgClass = getTypeColor(req.type, 'bg');
-                const textClass = getTypeColor(req.type, 'text');
-                const borderClass = getTypeColor(req.type, 'border');
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {activeAbsences.map(req => {
+                  const tech = technicians.find(t => t.id === req.techId);
+                  const bgClass = getTypeColor(req.type, 'bg');
+                  const textClass = getTypeColor(req.type, 'text');
+                  const borderClass = getTypeColor(req.type, 'border');
 
-                return (
-                  <div key={req.id} className="flex items-start p-3 bg-white rounded-lg border border-gray-200 shadow-sm relative overflow-hidden">
-                    <div className={`absolute top-0 left-0 bottom-0 w-1 ${bgClass.replace('bg-', 'bg-')}`}></div>
-                    <div className={`w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-white text-sm font-bold ${tech?.avatarColor} mr-3`}>
-                      {tech?.name.charAt(0)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-gray-900 truncate">{tech?.name}</p>
-                      <p className="text-xs text-gray-500 mb-1">{tech?.role}</p>
-                      <div className="flex items-center space-x-2">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide border ${bgClass} ${textClass} border-opacity-20`}>
-                          {getTypeLabel(req.type)}
-                        </span>
-                        <span className="text-[10px] text-gray-400 flex items-center">
-                           <Clock className="w-3 h-3 mr-1" />
-                           {req.slot === 'full' ? 'Tutto il dì' : req.slot}
-                        </span>
+                  return (
+                    <div key={req.id} className="flex flex-col bg-white rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                      <div className="p-4 flex items-start space-x-3">
+                        <div className="w-10 h-10 rounded-full bg-slate-800 text-white flex items-center justify-center text-sm font-bold shadow-sm">
+                            {tech?.initials}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                             <div className="flex justify-between items-start">
+                                 <p className="text-sm font-bold text-slate-900 truncate">{tech?.name}</p>
+                             </div>
+                             <p className="text-xs text-slate-500 mb-2">{tech?.role}</p>
+                             <div className="flex flex-wrap gap-2">
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${bgClass} ${textClass} ${borderClass}`}>
+                                {getTypeLabel(req.type)}
+                                </span>
+                                <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200 flex items-center">
+                                    <Clock className="w-3 h-3 mr-1" />
+                                    {getSlotLabel(req.slot)}
+                                </span>
+                             </div>
+                        </div>
                       </div>
                       {req.description && (
-                         <p className="text-[11px] text-gray-500 mt-1 italic truncate">"{req.description}"</p>
+                        <div className="px-4 py-2 bg-slate-50 border-t border-slate-100 text-xs text-slate-600 italic truncate rounded-b-lg">
+                           "{req.description}"
+                        </div>
                       )}
                     </div>
-                  </div>
-                );
-              })
+                  );
+                })}
+              </div>
             )}
           </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Chart */}
-        <div className="zendesk-card p-6">
-          <h3 className="text-lg font-semibold mb-4 text-gray-800">Statistiche Cantieri</h3>
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+          <h3 className="text-base font-bold mb-6 text-slate-800">Analisi Interventi (Cantiere)</h3>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} layout="vertical">
-                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
-                <XAxis type="number" />
-                <YAxis dataKey="name" type="category" width={120} tick={{fontSize: 12}} />
-                <Tooltip />
-                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e2e8f0" />
+                <XAxis type="number" hide />
+                <YAxis dataKey="name" type="category" width={140} tick={{fontSize: 12, fill: '#64748b'}} axisLine={false} tickLine={false} />
+                <Tooltip 
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
+                    cursor={{fill: '#f1f5f9'}}
+                />
+                <Bar dataKey="value" barSize={32} radius={[0, 4, 4, 0]}>
                   {chartData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.fill} />
                   ))}
@@ -424,11 +466,11 @@ const DashboardView = ({ requests, technicians }: { requests: LeaveRequest[], te
         </div>
 
         {/* Upcoming List */}
-        <div className="zendesk-card p-6">
-          <h3 className="text-lg font-semibold mb-4 text-gray-800">Prossime Pianificazioni</h3>
-          <div className="space-y-3">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+          <h3 className="text-base font-bold mb-6 text-slate-800">Pianificazioni Future</h3>
+          <div className="space-y-4">
             {upcomingLeaves.length === 0 ? (
-              <p className="text-gray-400 text-sm">Nessuna attività futura programmata.</p>
+              <p className="text-slate-400 text-sm text-center py-4">Nessuna attività futura registrata.</p>
             ) : (
               upcomingLeaves.map(req => {
                 const tech = technicians.find(t => t.id === req.techId);
@@ -436,21 +478,26 @@ const DashboardView = ({ requests, technicians }: { requests: LeaveRequest[], te
                 const textClass = getTypeColor(req.type, 'text');
 
                 return (
-                  <div key={req.id} className="flex items-center justify-between p-3 bg-gray-50 rounded border border-gray-100 hover:bg-white transition-colors">
+                  <div key={req.id} className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100 group">
                     <div className="flex items-center space-x-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs ${tech?.avatarColor}`}>
-                        {tech?.name.charAt(0)}
+                      <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center text-xs font-bold group-hover:bg-slate-300 transition-colors">
+                        {tech?.initials}
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-800">{tech?.name}</p>
-                        <p className="text-xs text-gray-500">
-                          {getTypeLabel(req.type)} • dal {req.startDate}
+                        <p className="text-sm font-semibold text-slate-800">{tech?.name}</p>
+                        <p className="text-xs text-slate-500">
+                           dal {new Date(req.startDate).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}
                         </p>
                       </div>
                     </div>
-                    <span className={`text-xs font-bold px-2 py-1 rounded ${bgClass} ${textClass}`}>
-                      {req.slot === 'full' ? 'GG' : req.slot}
-                    </span>
+                    <div className="text-right">
+                        <span className={`block text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider ${bgClass} ${textClass}`}>
+                        {getTypeLabel(req.type)}
+                        </span>
+                        <span className="text-[10px] text-slate-400 mt-1 block">
+                            {getSlotLabel(req.slot)}
+                        </span>
+                    </div>
                   </div>
                 );
               })
@@ -477,50 +524,66 @@ const CalendarView = ({ requests, technicians, currentMonth, currentYear, onChan
   const monthNames = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
 
   return (
-    <div className="zendesk-card p-4 h-full flex flex-col">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg md:text-xl font-bold text-gray-800">{monthNames[currentMonth]} {currentYear}</h2>
-        <div className="flex space-x-2">
-          <button onClick={() => onChangeMonth(-1)} className="p-2 hover:bg-gray-100 rounded"><ChevronLeft className="w-5 h-5" /></button>
-          <button onClick={() => onChangeMonth(1)} className="p-2 hover:bg-gray-100 rounded"><ChevronRight className="w-5 h-5" /></button>
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 h-full flex flex-col">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-bold text-slate-800 capitalize">{monthNames[currentMonth]} <span className="text-slate-400 font-normal">{currentYear}</span></h2>
+        <div className="flex space-x-2 bg-slate-100 p-1 rounded-lg">
+          <button onClick={() => onChangeMonth(-1)} className="p-2 hover:bg-white hover:shadow-sm rounded-md transition-all text-slate-600"><ChevronLeft className="w-5 h-5" /></button>
+          <button onClick={() => onChangeMonth(1)} className="p-2 hover:bg-white hover:shadow-sm rounded-md transition-all text-slate-600"><ChevronRight className="w-5 h-5" /></button>
         </div>
       </div>
       
-      <div className="grid grid-cols-7 gap-px bg-gray-200 border border-gray-200 rounded-lg overflow-hidden flex-1">
+      {/* Calendar Grid */}
+      <div className="grid grid-cols-7 mb-2">
         {['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'].map(d => (
-          <div key={d} className="bg-gray-50 p-1 md:p-2 text-center text-[10px] md:text-xs font-semibold text-gray-500 uppercase tracking-wide truncate">
+          <div key={d} className="text-center text-xs font-bold text-slate-400 uppercase tracking-wider py-2">
             {d}
           </div>
         ))}
-        {blanks.map(b => <div key={`blank-${b}`} className="bg-white min-h-[60px] md:min-h-[100px]" />)}
+      </div>
+
+      <div className="grid grid-cols-7 gap-2 flex-1 auto-rows-fr">
+        {blanks.map(b => <div key={`blank-${b}`} className="p-2" />)}
         {days.map(day => {
           const events = getEventsForDay(day);
           const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-          
+          const isToday = new Date().getDate() === day && new Date().getMonth() === currentMonth;
+
           return (
             <div 
               key={day} 
-              className="bg-white p-1 min-h-[60px] md:min-h-[100px] border-t border-gray-50 relative group hover:bg-blue-50/10 transition-colors cursor-pointer"
+              className={`
+                min-h-[100px] border border-slate-100 rounded-lg p-2 transition-all cursor-pointer relative
+                ${isToday ? 'bg-blue-50/50 ring-1 ring-blue-200' : 'bg-white hover:border-slate-300 hover:shadow-sm'}
+              `}
               onClick={() => onDateClick(dateStr)}
             >
-              <span className={`text-xs md:text-sm font-medium p-1 rounded-full ${new Date().getDate() === day && new Date().getMonth() === currentMonth ? 'bg-blue-600 text-white' : 'text-gray-700'}`}>
-                {day}
-              </span>
-              <div className="mt-1 space-y-1">
+              <div className="flex justify-between items-start mb-2">
+                  <span className={`text-sm font-semibold w-7 h-7 flex items-center justify-center rounded-full ${isToday ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-700'}`}>
+                    {day}
+                  </span>
+              </div>
+              
+              <div className="space-y-1.5 overflow-hidden">
                 {events.map((ev: LeaveRequest) => {
                   const tech = technicians.find((t:any) => t.id === ev.techId);
                   const bgClass = getTypeColor(ev.type, 'bg');
                   const textClass = getTypeColor(ev.type, 'text');
+                  const borderClass = getTypeColor(ev.type, 'border');
                   
                   return (
                     <div 
                       key={ev.id} 
-                      className={`text-[9px] md:text-[10px] px-1 py-0.5 rounded truncate ${bgClass} ${textClass} cursor-pointer hover:brightness-95`}
+                      className={`
+                        text-[10px] px-2 py-1 rounded-md border truncate font-medium transition-transform hover:scale-105
+                        ${bgClass} ${textClass} ${borderClass}
+                      `}
                       onMouseEnter={(e) => onHoverInfo(e, ev, tech)}
                       onMouseLeave={() => onHoverInfo(null)}
-                      onClick={(e) => { e.stopPropagation(); onDateClick(dateStr); }} // Clicking an event also opens form for that day
+                      onClick={(e) => { e.stopPropagation(); onDateClick(dateStr); }} 
                     >
-                      {tech?.name.split(' ')[0]} {ev.slot === 'morning' ? '(M)' : ev.slot === 'afternoon' ? '(P)' : ''}
+                      <span className="font-bold mr-1">{tech?.initials}</span>
+                      {ev.slot === 'morning' ? '(Mat)' : ev.slot === 'afternoon' ? '(Pom)' : ''}
                     </div>
                   );
                 })}
@@ -538,15 +601,17 @@ const TimelineView = ({ requests, technicians, currentMonth, currentYear, onHove
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
   return (
-    <div className="zendesk-card p-4 overflow-hidden flex flex-col h-full">
-      <h3 className="text-lg font-bold mb-4">Timeline Disponibilità</h3>
-      <div className="flex-1 overflow-auto timeline-scroll relative border rounded">
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 overflow-hidden flex flex-col h-full">
+      <h3 className="text-xl font-bold mb-6 text-slate-800">Timeline Disponibilità</h3>
+      <div className="flex-1 overflow-auto timeline-scroll relative border border-slate-200 rounded-lg">
         <div className="min-w-max">
           {/* Header Row */}
-          <div className="flex border-b sticky top-0 bg-gray-50 z-10">
-            <div className="w-32 md:w-48 p-3 font-semibold text-gray-600 border-r bg-gray-50 sticky left-0 z-20 shadow-sm">Tecnico</div>
+          <div className="flex border-b border-slate-200 sticky top-0 bg-slate-50 z-20 shadow-sm">
+            <div className="w-48 p-3 font-bold text-slate-500 text-xs uppercase tracking-wider border-r border-slate-200 sticky left-0 bg-slate-50 z-30">
+                Tecnico
+            </div>
             {days.map(d => (
-              <div key={d} className="w-8 md:w-10 flex-shrink-0 text-center text-xs text-gray-500 py-3 border-r">
+              <div key={d} className="w-10 flex-shrink-0 text-center text-xs font-semibold text-slate-500 py-3 border-r border-slate-100">
                 {d}
               </div>
             ))}
@@ -554,12 +619,15 @@ const TimelineView = ({ requests, technicians, currentMonth, currentYear, onHove
 
           {/* Rows */}
           {technicians.map((tech: Technician) => (
-            <div key={tech.id} className="flex border-b hover:bg-gray-50">
-              <div className="w-32 md:w-48 p-3 border-r flex items-center space-x-2 sticky left-0 bg-white z-10">
-                <div className={`w-6 h-6 rounded-full ${tech.avatarColor} text-white text-xs flex items-center justify-center`}>
-                  {tech.name.charAt(0)}
+            <div key={tech.id} className="flex border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
+              <div className="w-48 p-3 border-r border-slate-200 flex items-center space-x-3 sticky left-0 bg-white z-10 group">
+                <div className="w-8 h-8 rounded-full bg-slate-800 text-white text-xs flex items-center justify-center font-bold">
+                  {tech.initials}
                 </div>
-                <span className="text-xs md:text-sm font-medium text-gray-700 truncate">{tech.name}</span>
+                <div>
+                    <span className="text-sm font-semibold text-slate-700 block">{tech.name}</span>
+                    <span className="text-[10px] text-slate-400 uppercase">{tech.role}</span>
+                </div>
               </div>
               {days.map(d => {
                 const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -572,19 +640,21 @@ const TimelineView = ({ requests, technicians, currentMonth, currentYear, onHove
                    const isStart = leave.startDate === dateStr;
                    const isEnd = leave.endDate === dateStr;
                    const roundedClass = `${isStart ? 'rounded-l-md' : ''} ${isEnd ? 'rounded-r-md' : ''}`;
-                   let bgClass = '';
-                   let letter = '';
                    
+                   // Use Solid colors for Timeline for better visibility
+                   const solidBg = getTypeColor(leave.type, 'solid');
+                   
+                   let letter = '';
                    switch(leave.type) {
-                     case 'ferie': bgClass = 'bg-red-400'; letter='F'; break;
-                     case 'permesso': bgClass = 'bg-yellow-400'; letter='P'; break;
-                     case 'malattia': bgClass = 'bg-purple-400'; letter='M'; break;
-                     case 'cantiere': bgClass = 'bg-cyan-500'; letter='C'; break;
+                     case 'ferie': letter='F'; break;
+                     case 'permesso': letter='P'; break;
+                     case 'malattia': letter='M'; break;
+                     case 'cantiere': letter='C'; break;
                    }
 
                    cellContent = (
                      <div 
-                      className={`h-6 mx-0.5 mt-2 ${roundedClass} text-[9px] flex items-center justify-center text-white cursor-help ${bgClass} hover:brightness-110 transition-all`}
+                      className={`h-7 mx-0.5 my-auto ${roundedClass} text-[10px] font-bold flex items-center justify-center text-white cursor-help ${solidBg} shadow-sm hover:opacity-90 transition-all`}
                       onMouseEnter={(e) => onHoverInfo(e, leave, tech)}
                       onMouseLeave={() => onHoverInfo(null)}
                      >
@@ -596,7 +666,7 @@ const TimelineView = ({ requests, technicians, currentMonth, currentYear, onHove
                 return (
                   <div 
                     key={d} 
-                    className="w-8 md:w-10 flex-shrink-0 border-r relative bg-white cursor-pointer hover:bg-blue-50/20"
+                    className="w-10 flex-shrink-0 border-r border-slate-100 relative bg-transparent cursor-pointer hover:bg-slate-100/50 flex flex-col justify-center"
                     onClick={() => onDateClick(dateStr, tech.id)}
                   >
                     {cellContent}
@@ -625,12 +695,10 @@ const RequestForm = ({ technicians, onSubmit, onCancel, initialValues }: any) =>
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Validate logic
     if (formData.techId && formData.startDate) {
       onSubmit({
         ...formData,
         id: Math.random().toString(36).substr(2, 9),
-        // Ensure endDate is set same as start if not provided
         endDate: formData.endDate || formData.startDate
       });
     }
@@ -639,91 +707,103 @@ const RequestForm = ({ technicians, onSubmit, onCancel, initialValues }: any) =>
   const SelectionCard = ({ type, icon: Icon, label, sub, colorClass, borderClass }: any) => (
     <button 
       type="button"
-      className={`p-4 border rounded-lg flex flex-col items-center transition-all ${formData.type === type ? `${borderClass} ${colorClass.replace('text', 'bg').replace('500', '50').replace('700', '50')}` : 'border-gray-200 hover:bg-gray-50'}`}
+      className={`
+        p-4 border rounded-xl flex flex-col items-center justify-center transition-all h-28
+        ${formData.type === type 
+            ? `${borderClass} bg-white ring-2 ring-offset-1 ring-slate-200 shadow-md` 
+            : 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-white hover:border-slate-300'
+        }
+      `}
       onClick={() => setFormData({...formData, type: type, slot: type === 'permesso' ? 'hours' : 'full'})}
     >
-      <Icon className={`w-6 h-6 mb-2 ${formData.type === type ? colorClass : 'text-gray-400'}`} />
-      <span className="font-medium text-sm">{label}</span>
-      {sub && <span className="text-[10px] text-gray-500">{sub}</span>}
+      <Icon className={`w-8 h-8 mb-2 ${formData.type === type ? colorClass : 'text-slate-400'}`} />
+      <span className={`font-bold text-sm ${formData.type === type ? 'text-slate-800' : 'text-slate-500'}`}>{label}</span>
+      {sub && <span className="text-[10px] text-slate-400">{sub}</span>}
     </button>
   );
 
   return (
-    <div className="zendesk-card max-w-2xl mx-auto p-4 md:p-8 mt-6">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl md:text-2xl font-bold text-gray-800">Nuova Richiesta / Attività</h2>
-        <button onClick={onCancel} className="text-gray-500 hover:text-gray-700 text-sm md:text-base">Chiudi</button>
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 max-w-2xl mx-auto p-8 mt-6">
+      <div className="flex justify-between items-center mb-8 pb-4 border-b border-slate-100">
+        <div>
+            <h2 className="text-2xl font-bold text-slate-900">Nuova Pianificazione</h2>
+            <p className="text-slate-500 text-sm mt-1">Inserisci i dettagli per la nuova attività o assenza.</p>
+        </div>
+        <button onClick={onCancel} className="text-slate-500 hover:text-slate-800 text-sm font-medium px-4 py-2 hover:bg-slate-100 rounded-lg transition-colors">Annulla</button>
       </div>
       
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-8">
         {/* Tecnico */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Tecnico</label>
+        <div className="space-y-2">
+          <label className="block text-sm font-bold text-slate-700">Seleziona Tecnico</label>
           <div className="relative">
             <select 
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
+              className="block w-full rounded-lg border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 py-3 px-4 border bg-white"
               value={formData.techId}
               onChange={e => setFormData({...formData, techId: e.target.value})}
             >
               {technicians.map((t: Technician) => (
-                <option key={t.id} value={t.id}>{t.name} ({t.role})</option>
+                <option key={t.id} value={t.id}>{t.name} — {t.role}</option>
               ))}
             </select>
           </div>
         </div>
 
         {/* Tipo Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <SelectionCard 
-            type="ferie" 
-            icon={Sun} 
-            label="Ferie" 
-            sub="Assenza retribuita" 
-            colorClass="text-red-500" 
-            borderClass="border-red-500" 
-          />
-          <SelectionCard 
-            type="permesso" 
-            icon={Clock} 
-            label="Permesso" 
-            sub="Ore o ROL" 
-            colorClass="text-yellow-500" 
-            borderClass="border-yellow-500" 
-          />
-          <SelectionCard 
-            type="malattia" 
-            icon={Thermometer} 
-            label="Malattia" 
-            sub="Certificato medico" 
-            colorClass="text-purple-500" 
-            borderClass="border-purple-500" 
-          />
-          <SelectionCard 
-            type="cantiere" 
-            icon={Hammer} 
-            label="Cantiere" 
-            sub="Lavoro esterno" 
-            colorClass="text-cyan-500" 
-            borderClass="border-cyan-500" 
-          />
+        <div className="space-y-2">
+            <label className="block text-sm font-bold text-slate-700">Tipologia Attività</label>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <SelectionCard 
+                type="ferie" 
+                icon={Sun} 
+                label="Ferie" 
+                sub="Assenza" 
+                colorClass="text-rose-600" 
+                borderClass="border-rose-500" 
+            />
+            <SelectionCard 
+                type="permesso" 
+                icon={Clock} 
+                label="Permesso" 
+                sub="Ore/ROL" 
+                colorClass="text-amber-500" 
+                borderClass="border-amber-500" 
+            />
+            <SelectionCard 
+                type="malattia" 
+                icon={Thermometer} 
+                label="Malattia" 
+                sub="Medico" 
+                colorClass="text-indigo-600" 
+                borderClass="border-indigo-500" 
+            />
+            <SelectionCard 
+                type="cantiere" 
+                icon={Hammer} 
+                label="Cantiere" 
+                sub="Lavoro" 
+                colorClass="text-emerald-600" 
+                borderClass="border-emerald-500" 
+            />
+            </div>
         </div>
 
         {/* Date Selection */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-           <div>
-             <label className="block text-sm font-medium text-gray-700 mb-1">Dal</label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+           <div className="space-y-2">
+             <label className="block text-sm font-bold text-slate-700">Data Inizio</label>
              <input 
                type="date" 
-               className="block w-full rounded-md border-gray-300 shadow-sm border p-2"
+               className="block w-full rounded-lg border-slate-300 shadow-sm border p-3 focus:ring-2 focus:ring-[#17494D]/20 focus:border-[#17494D]"
                value={formData.startDate}
                onChange={e => setFormData({...formData, startDate: e.target.value, endDate: e.target.value > (formData.endDate || '') ? e.target.value : formData.endDate})}
              />
            </div>
-           <div>
-             <label className="block text-sm font-medium text-gray-700 mb-1">Al</label>
+           <div className="space-y-2">
+             <label className="block text-sm font-bold text-slate-700">Data Fine</label>
              <input 
                type="date" 
-               className="block w-full rounded-md border-gray-300 shadow-sm border p-2"
+               className="block w-full rounded-lg border-slate-300 shadow-sm border p-3 focus:ring-2 focus:ring-[#17494D]/20 focus:border-[#17494D]"
                value={formData.endDate}
                min={formData.startDate}
                onChange={e => setFormData({...formData, endDate: e.target.value})}
@@ -732,65 +812,76 @@ const RequestForm = ({ technicians, onSubmit, onCancel, initialValues }: any) =>
         </div>
 
         {/* Slot Specifics */}
-        <div className="bg-gray-50 p-4 rounded-md">
-           <label className="block text-sm font-medium text-gray-700 mb-2">Dettaglio</label>
-           <div className="flex flex-col sm:flex-row sm:space-x-4 gap-y-2 mb-4">
+        <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
+           <label className="block text-sm font-bold text-slate-700 mb-4">Dettagli Temporali</label>
+           
+           <div className="flex flex-wrap gap-4 mb-6">
              {['full', 'morning', 'afternoon'].map(opt => (
-               <label key={opt} className="flex items-center mr-4">
+               <label key={opt} className={`
+                    flex items-center px-4 py-2 rounded-lg border cursor-pointer transition-all
+                    ${formData.slot === opt 
+                        ? 'bg-white border-slate-400 ring-1 ring-slate-400 text-slate-800 shadow-sm' 
+                        : 'bg-transparent border-slate-200 text-slate-500 hover:bg-white'}
+               `}>
                  <input 
                     type="radio" 
                     name="slot" 
                     value={opt} 
                     checked={formData.slot === opt}
                     onChange={() => setFormData({...formData, slot: opt as TimeSlot, hours: undefined})}
-                    className="mr-2"
+                    className="hidden"
                  />
-                 <span className="capitalize">{opt === 'full' ? 'Tutto il Giorno' : opt === 'morning' ? 'Mattina' : 'Pomeriggio'}</span>
+                 <span className="capitalize font-medium text-sm">{getSlotLabel(opt as TimeSlot)}</span>
                </label>
              ))}
              {formData.type === 'permesso' && (
-               <label className="flex items-center">
+               <label className={`
+                    flex items-center px-4 py-2 rounded-lg border cursor-pointer transition-all
+                    ${formData.slot === 'hours' 
+                        ? 'bg-white border-slate-400 ring-1 ring-slate-400 text-slate-800 shadow-sm' 
+                        : 'bg-transparent border-slate-200 text-slate-500 hover:bg-white'}
+               `}>
                  <input 
                     type="radio" 
                     name="slot" 
                     value="hours" 
                     checked={formData.slot === 'hours'}
                     onChange={() => setFormData({...formData, slot: 'hours'})}
-                    className="mr-2"
+                    className="hidden"
                  />
-                 <span>A Ore</span>
+                 <span className="font-medium text-sm">A Ore</span>
                </label>
              )}
            </div>
 
            {formData.slot === 'hours' && (
-             <div className="mb-4 animate-fade-in">
-               <label className="block text-xs font-medium text-gray-500 mb-1">Numero Ore</label>
+             <div className="mb-6 animate-fade-in">
+               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Quantità Ore</label>
                <input 
                  type="number" 
                  min="1" 
                  max="8" 
                  value={formData.hours || 1} 
                  onChange={e => setFormData({...formData, hours: parseInt(e.target.value)})}
-                 className="w-20 border rounded p-1"
+                 className="w-24 border border-slate-300 rounded-lg p-2 text-center font-bold text-slate-700"
                />
              </div>
            )}
 
            <div>
-             <label className="block text-xs font-medium text-gray-500 mb-1">Note / Descrizione (Opzionale)</label>
+             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Note / Descrizione</label>
              <input 
                type="text" 
                value={formData.description || ''}
                onChange={e => setFormData({...formData, description: e.target.value})}
-               className="w-full border rounded p-2 text-sm"
-               placeholder="Es. Visita medica, Cantiere Via Roma..."
+               className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#17494D]/20 focus:border-[#17494D]"
+               placeholder="Es. Installazione presso Cliente..."
              />
            </div>
         </div>
 
-        <button type="submit" className="w-full bg-[#17494D] text-white py-3 rounded hover:bg-[#133a3e] transition-colors font-medium">
-          Inserisci Richiesta
+        <button type="submit" className="w-full bg-[#17494D] text-white py-4 rounded-xl hover:bg-[#133a3e] transition-colors font-bold text-lg shadow-lg shadow-[#17494D]/20">
+          Conferma Inserimento
         </button>
       </form>
     </div>
@@ -843,13 +934,11 @@ const App = () => {
       setTooltipData({ ...tooltipData, visible: false });
       return;
     }
-
-    const rect = (e.target as HTMLElement).getBoundingClientRect();
     
     // Format date string for tooltip
-    let dateStr = req.startDate;
+    let dateStr = new Date(req.startDate).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' });
     if (req.endDate && req.endDate !== req.startDate) {
-      dateStr += ` → ${req.endDate}`;
+      dateStr += ` → ${new Date(req.endDate).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}`;
     }
 
     setTooltipData({
@@ -867,16 +956,18 @@ const App = () => {
   };
 
   return (
-    <div className="h-screen bg-gray-100 flex flex-col overflow-hidden">
+    <div className="h-screen bg-slate-50 flex flex-col overflow-hidden font-sans text-slate-600">
       <GlobalTooltip data={tooltipData} />
       
-      {/* Fake Zendesk Navbar Strip */}
-      <div className="bg-[#17494D] h-12 flex-shrink-0 flex items-center px-4 justify-between shadow-sm z-30">
-        <div className="flex items-center space-x-3">
-           <div className="text-white font-bold text-lg tracking-tight">Zendesk</div>
-           <div className="bg-white/20 text-white text-xs px-2 py-0.5 rounded hidden sm:block">Team Resources App</div>
+      {/* Fake Zendesk Navbar Strip - now cleaner */}
+      <div className="bg-[#17494D] h-14 flex-shrink-0 flex items-center px-6 justify-between shadow-md z-30">
+        <div className="flex items-center space-x-4">
+           <div className="text-white font-extrabold text-xl tracking-tight">Zendesk</div>
+           <div className="bg-white/10 text-white/90 text-xs px-3 py-1 rounded-full backdrop-blur-sm hidden sm:block border border-white/10">
+              Portale Risorse
+           </div>
         </div>
-        <div className="text-white/80 text-sm">ITS Pescara Helpdesk</div>
+        <div className="text-white/80 text-sm font-medium">ITS Pescara Helpdesk</div>
       </div>
 
       {/* Main Content Area with Sidebar */}
@@ -890,7 +981,7 @@ const App = () => {
         />
 
         {/* Content Scroll Area */}
-        <div className="flex-1 overflow-auto p-4 md:p-6 w-full relative">
+        <div className="flex-1 overflow-auto p-4 md:p-8 w-full relative">
           
           <div className="max-w-7xl mx-auto min-h-[600px]">
             {view === 'dashboard' && <DashboardView requests={requests} technicians={TECHNICIANS} />}
