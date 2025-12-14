@@ -1,12 +1,10 @@
-
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { 
   AlertCircle, CheckCircle2, Briefcase, Users, Clock, 
   Calendar as CalendarIcon, LayoutDashboard, Plus, Trash2, 
   ChevronLeft, ChevronRight, UserCog
 } from 'lucide-react';
-import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar, Cell } from 'recharts';
 import { db } from './db.js';
 
 // --- INTERFACES ---
@@ -112,17 +110,10 @@ const DashboardView = ({ requests, technicians }: { requests: LeaveRequest[], te
      ? absentNamesList.join(', ') 
      : `Su ${technicians.length} tecnici totali`;
 
-  const chartData = useMemo(() => {
-    const cantiereCount = requests.filter(r => r.type === 'cantiere').length;
-    return [
-      { name: 'Interventi Cantiere', value: cantiereCount, fill: getTypeColor('cantiere', 'fill') },
-    ];
-  }, [requests]);
-
   const upcomingLeaves = requests
     .filter(r => r.startDate > today)
     .sort((a, b) => a.startDate.localeCompare(b.startDate))
-    .slice(0, 5);
+    .slice(0, 10); // Increased slice since we have more space
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -222,36 +213,15 @@ const DashboardView = ({ requests, technicians }: { requests: LeaveRequest[], te
           </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <h3 className="text-base font-bold mb-6 text-slate-800">Analisi Interventi (Cantiere)</h3>
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} layout="vertical">
-                 <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e2e8f0" />
-                <XAxis type="number" hide />
-                <YAxis dataKey="name" type="category" width={140} tick={{fontSize: 12, fill: '#64748b'}} axisLine={false} tickLine={false} />
-                <Tooltip 
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
-                    cursor={{fill: '#f1f5f9'}}
-                />
-                <Bar dataKey="value" barSize={32} radius={[0, 4, 4, 0]}>
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <h3 className="text-base font-bold mb-6 text-slate-800">Pianificazioni Future</h3>
-          <div className="space-y-4">
-            {upcomingLeaves.length === 0 ? (
-              <p className="text-slate-400 text-sm text-center py-4">Nessuna attività futura registrata.</p>
-            ) : (
-              upcomingLeaves.map(req => {
+      {/* Upcoming List (Full Width) */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <h3 className="text-base font-bold mb-6 text-slate-800">Pianificazioni Future</h3>
+        <div className="space-y-4">
+          {upcomingLeaves.length === 0 ? (
+            <p className="text-slate-400 text-sm text-center py-4">Nessuna attività futura registrata.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {upcomingLeaves.map(req => {
                 const tech = technicians.find(t => t.id === req.techId);
                 const bgClass = getTypeColor(req.type, 'bg');
                 const textClass = getTypeColor(req.type, 'text');
@@ -265,7 +235,7 @@ const DashboardView = ({ requests, technicians }: { requests: LeaveRequest[], te
                       <div>
                         <p className="text-sm font-semibold text-slate-800">{tech?.name}</p>
                         <p className="text-xs text-slate-500">
-                           dal {new Date(req.startDate).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}
+                            dal {new Date(req.startDate).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })}
                         </p>
                       </div>
                     </div>
@@ -279,9 +249,9 @@ const DashboardView = ({ requests, technicians }: { requests: LeaveRequest[], te
                     </div>
                   </div>
                 );
-              })
-            )}
-          </div>
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>
