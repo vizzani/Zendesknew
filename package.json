@@ -2,11 +2,18 @@
   "name": "zendesk-resource-calendar",
   "version": "1.0.0",
   "scripts": {
-    "build": "echo 'No build step necessary for this setup'"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
     "@vercel/postgres": "^0.7.2",
+    "lucide-react": "^0.344.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.1",
+    "vite": "^5.1.4"
   }
 }
