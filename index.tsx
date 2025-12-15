@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { 
   AlertCircle, CheckCircle2, Briefcase, Users, Clock, 
   Calendar as CalendarIcon, LayoutDashboard, Plus, Trash2, 
-  ChevronLeft, ChevronRight, UserCog
+  ChevronLeft, ChevronRight, UserCog, Table
 } from 'lucide-react';
 import { db } from './db.js';
 
@@ -275,49 +275,186 @@ const CalendarView = ({ requests, technicians, onDelete }: { requests: LeaveRequ
   const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
   const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
 
+  const legendTypes = ['ferie', 'permesso', 'malattia', 'cantiere'];
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-bold text-slate-800 capitalize">
-          {currentDate.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })}
-        </h2>
-        <div className="flex space-x-2">
-          <button onClick={prevMonth} className="p-2 hover:bg-slate-100 rounded-full"><ChevronLeft className="w-5 h-5" /></button>
-          <button onClick={nextMonth} className="p-2 hover:bg-slate-100 rounded-full"><ChevronRight className="w-5 h-5" /></button>
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+        <div className="flex items-center justify-between w-full md:w-auto">
+            <div className="flex space-x-2 mr-4">
+                <button onClick={prevMonth} className="p-2 hover:bg-slate-100 rounded-full border border-slate-200"><ChevronLeft className="w-4 h-4" /></button>
+                <button onClick={nextMonth} className="p-2 hover:bg-slate-100 rounded-full border border-slate-200"><ChevronRight className="w-4 h-4" /></button>
+            </div>
+            <h2 className="text-xl font-bold text-slate-800 capitalize min-w-[200px] text-center md:text-left">
+            {currentDate.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })}
+            </h2>
+        </div>
+
+        {/* LEGENDA */}
+        <div className="flex flex-wrap gap-3 bg-slate-50 px-4 py-2 rounded-lg border border-slate-100">
+            {legendTypes.map(type => (
+                <div key={type} className="flex items-center">
+                    <span className={`w-3 h-3 rounded-full mr-2 ${getTypeColor(type, 'bg')} border ${getTypeColor(type, 'border')}`}></span>
+                    <span className="text-xs font-medium text-slate-600 capitalize">{getTypeLabel(type)}</span>
+                </div>
+            ))}
         </div>
       </div>
       
-      <div className="grid grid-cols-7 gap-px bg-slate-200 rounded-lg overflow-hidden border border-slate-200">
+      <div className="grid grid-cols-7 gap-px bg-slate-200 rounded-lg overflow-hidden border border-slate-200 shadow-sm">
         {['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'].map(day => (
-          <div key={day} className="bg-slate-50 p-2 text-center text-xs font-semibold text-slate-500 uppercase">
+          <div key={day} className="bg-slate-50 p-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">
             {day}
           </div>
         ))}
-        {/* Padding for start of month would go here, simplified for now */}
-        {days.map(({ date, dateStr, dayRequests }) => (
-          <div key={dateStr} className="bg-white min-h-[100px] p-2 hover:bg-slate-50 transition-colors relative group">
-            <span className={`text-xs font-semibold ${date.getDay() === 0 || date.getDay() === 6 ? 'text-red-400' : 'text-slate-700'}`}>
-              {date.getDate()}
-            </span>
-            <div className="mt-1 space-y-1">
-              {dayRequests.map(req => {
-                const tech = technicians.find(t => t.id === req.techId);
-                const bgClass = getTypeColor(req.type, 'bg');
-                return (
-                  <div key={req.id} className={`text-[10px] px-1 py-0.5 rounded ${bgClass} truncate flex justify-between items-center group/item`}>
-                    <span>{tech?.initials} - {getTypeLabel(req.type)}</span>
-                    <button onClick={() => onDelete(req.id)} className="hidden group-hover/item:block text-slate-500 hover:text-red-500">
-                       <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+        
+        {days.map(({ date, dateStr, dayRequests }) => {
+            const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+            return (
+                <div key={dateStr} className={`bg-white min-h-[120px] p-2 transition-colors relative group ${isWeekend ? 'bg-slate-50/50' : 'hover:bg-blue-50/30'}`}>
+                    <div className="flex justify-between items-start mb-1">
+                        <span className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full ${dateStr === formatDate(new Date()) ? 'bg-blue-600 text-white shadow-md' : (isWeekend ? 'text-red-400' : 'text-slate-700')}`}>
+                        {date.getDate()}
+                        </span>
+                    </div>
+                    
+                    <div className="mt-1 space-y-1.5">
+                    {dayRequests.map(req => {
+                        const tech = technicians.find(t => t.id === req.techId);
+                        const bgClass = getTypeColor(req.type, 'bg');
+                        const textClass = getTypeColor(req.type, 'text');
+                        // Utilizziamo un bordo leggero per definire meglio il box colorato
+                        const borderClass = req.type === 'cantiere' ? 'border-blue-200' : 'border-transparent'; 
+
+                        return (
+                        <div 
+                            key={req.id} 
+                            className={`text-[10px] px-2 py-1 rounded border ${bgClass} ${textClass} ${borderClass} truncate flex justify-between items-center group/item shadow-sm`}
+                            title={`${tech?.name} - ${getTypeLabel(req.type)} (${getSlotLabel(req.slot)})`}
+                        >
+                            <span className="font-semibold truncate">{tech?.initials}</span>
+                            <span className="hidden md:inline ml-1 opacity-80 truncate">- {getTypeLabel(req.type)}</span>
+                            
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); onDelete(req.id); }} 
+                                className="opacity-0 group-hover/item:opacity-100 ml-1 text-current hover:font-bold transition-opacity"
+                            >
+                            <Trash2 className="w-3 h-3" />
+                            </button>
+                        </div>
+                        );
+                    })}
+                    </div>
+                </div>
+            );
+        })}
       </div>
     </div>
   );
+};
+
+// 3.5 TIMELINE VIEW (VISTA "TUTTI")
+const TimelineView = ({ requests, technicians }: { requests: LeaveRequest[], technicians: Technician[] }) => {
+    const [currentDate, setCurrentDate] = useState(new Date());
+
+    const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
+    const daysInMonth = getDaysInMonth(currentDate.getFullYear(), currentDate.getMonth());
+    
+    // Genera array dei giorni del mese
+    const days = Array.from({ length: daysInMonth }, (_, i) => {
+        const d = new Date(currentDate.getFullYear(), currentDate.getMonth(), i + 1);
+        return {
+            date: d,
+            dateStr: formatDate(d),
+            dayLabel: d.getDate(),
+            isWeekend: d.getDay() === 0 || d.getDay() === 6
+        };
+    });
+
+    const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+    const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+
+    const legendTypes = ['ferie', 'permesso', 'malattia', 'cantiere'];
+
+    return (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-[calc(100vh-140px)]">
+            {/* HEADER */}
+            <div className="p-4 border-b border-slate-200 flex flex-col md:flex-row justify-between items-center gap-4">
+                 <div className="flex items-center gap-4">
+                    <div className="flex space-x-2">
+                        <button onClick={prevMonth} className="p-2 hover:bg-slate-100 rounded-full border border-slate-200"><ChevronLeft className="w-4 h-4" /></button>
+                        <button onClick={nextMonth} className="p-2 hover:bg-slate-100 rounded-full border border-slate-200"><ChevronRight className="w-4 h-4" /></button>
+                    </div>
+                    <h2 className="text-lg font-bold text-slate-800 capitalize">
+                    {currentDate.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })}
+                    </h2>
+                 </div>
+
+                 <div className="flex flex-wrap gap-3">
+                    {legendTypes.map(type => (
+                        <div key={type} className="flex items-center">
+                            <span className={`w-3 h-3 rounded-sm mr-2 ${getTypeColor(type, 'bg')} border ${getTypeColor(type, 'border')}`}></span>
+                            <span className="text-xs text-slate-500 capitalize">{getTypeLabel(type)}</span>
+                        </div>
+                    ))}
+                 </div>
+            </div>
+
+            {/* TABLE SCROLL CONTAINER */}
+            <div className="flex-1 overflow-auto relative">
+                <table className="w-full border-collapse">
+                    <thead className="bg-slate-50 sticky top-0 z-20">
+                        <tr>
+                            <th className="sticky left-0 bg-slate-50 z-30 p-3 text-left text-xs font-bold text-slate-500 uppercase border-b border-r border-slate-200 min-w-[150px] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                                Tecnico
+                            </th>
+                            {days.map(d => (
+                                <th key={d.dateStr} className={`p-1 text-center border-b border-slate-200 min-w-[36px] ${d.isWeekend ? 'bg-slate-100 text-red-400' : 'text-slate-600'}`}>
+                                    <div className="text-[10px] font-bold">{d.dayLabel}</div>
+                                    <div className="text-[9px] font-normal uppercase">{d.date.toLocaleDateString('it-IT', { weekday: 'narrow' })}</div>
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {technicians.map((tech, idx) => (
+                            <tr key={tech.id} className="hover:bg-slate-50/50">
+                                <td className="sticky left-0 bg-white z-10 p-3 border-b border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-600 text-[10px] flex items-center justify-center font-bold">
+                                            {tech.initials}
+                                        </div>
+                                        <div className="text-xs font-medium text-slate-700 truncate max-w-[120px]" title={tech.name}>
+                                            {tech.name}
+                                        </div>
+                                    </div>
+                                </td>
+                                {days.map(d => {
+                                    const dayReq = requests.find(r => r.techId === tech.id && isDateInRange(d.dateStr, r.startDate, r.endDate));
+                                    const bgClass = dayReq ? getTypeColor(dayReq.type, 'bg') : (d.isWeekend ? 'bg-slate-50' : '');
+                                    const textClass = dayReq ? getTypeColor(dayReq.type, 'text') : '';
+                                    const borderClass = dayReq ? getTypeColor(dayReq.type, 'border') : 'border-slate-100';
+
+                                    return (
+                                        <td key={`${tech.id}-${d.dateStr}`} className={`border-b border-r ${borderClass} ${bgClass} p-1 text-center relative h-10`}>
+                                            {dayReq && (
+                                                <div 
+                                                    className={`w-full h-full flex items-center justify-center text-[10px] font-bold ${textClass}`}
+                                                    title={`${getTypeLabel(dayReq.type)} (${getSlotLabel(dayReq.slot)})`}
+                                                >
+                                                    {dayReq.type.charAt(0).toUpperCase()}
+                                                </div>
+                                            )}
+                                        </td>
+                                    );
+                                })}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
 };
 
 // 4. TECH MANAGEMENT VIEW
@@ -488,7 +625,7 @@ const InsertModal = ({ technicians, onClose, onSave }: { technicians: Technician
 
 // --- MAIN APP COMPONENT ---
 const App = () => {
-  const [view, setView] = useState<'dashboard' | 'calendar' | 'techs'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'calendar' | 'timeline' | 'techs'>('dashboard');
   const [showModal, setShowModal] = useState(false);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [requests, setRequests] = useState<LeaveRequest[]>([]);
@@ -562,6 +699,12 @@ const App = () => {
             <CalendarIcon className="w-5 h-5 mr-3" /> Calendario
           </button>
           <button 
+            onClick={() => setView('timeline')}
+            className={`w-full flex items-center p-3 rounded-lg text-sm font-medium transition-colors ${view === 'timeline' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800'}`}
+          >
+            <Table className="w-5 h-5 mr-3" /> Vista Globale
+          </button>
+          <button 
             onClick={() => setView('techs')}
             className={`w-full flex items-center p-3 rounded-lg text-sm font-medium transition-colors ${view === 'techs' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'hover:bg-slate-800'}`}
           >
@@ -584,6 +727,7 @@ const App = () => {
         <div className="max-w-7xl mx-auto">
           {view === 'dashboard' && <DashboardView requests={requests} technicians={technicians} />}
           {view === 'calendar' && <CalendarView requests={requests} technicians={technicians} onDelete={handleDeleteRequest} />}
+          {view === 'timeline' && <TimelineView requests={requests} technicians={technicians} />}
           {view === 'techs' && <TechView technicians={technicians} onAdd={handleAddTech} onDelete={handleDeleteTech} />}
         </div>
       </main>
